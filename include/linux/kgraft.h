@@ -1,0 +1,105 @@
+/*
+ * kGraft Online Kernel Patching
+ *
+ *  Copyright (c) 2013-2014 SUSE
+ *   Authors: Jiri Kosina
+ *	      Vojtech Pavlik
+ *	      Jiri Slaby
+ */
+
+/*
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ */
+
+#ifndef LINUX_KGRAFT_H
+#define LINUX_KGRAFT_H
+
+#include <linux/bitops.h>
+#include <linux/kobject.h>
+#include <linux/ftrace.h>
+#include <linux/sched.h>
+
+#if IS_ENABLED(CONFIG_KGRAFT)
+
+#include <asm/kgraft.h>
+
+#define KGR_TIMEOUT 2
+
+/**
+ * struct kgr_patch_fun -- state of a single function in a kGraft patch
+ *
+ * @name: function to patch
+ * @new_fun: function with the new body
+ * @loc_old: cache of @name's function address
+ * @ftrace_ops_slow: ftrace ops for slow (temporary) stub
+ * @ftrace_ops_fast: ftrace ops for fast () stub
+ */
+struct kgr_patch_fun {
+	const char *name;
+	void *new_fun;
+
+	bool abort_if_missing;
+	enum kgr_patch_state {
+		KGR_PATCH_INIT,
+		KGR_PATCH_SLOW,
+		KGR_PATCH_APPLIED,
+
+		KGR_PATCH_REVERT_SLOW,
+		KGR_PATCH_REVERTED,
+
+		KGR_PATCH_SKIPPED,
+	} state;
+
+	unsigned long loc_old;
+
+	struct ftrace_ops ftrace_ops_slow;
+	struct ftrace_ops ftrace_ops_fast;
+};
+
+/**
+ * struct kgr_patch -- a kGraft patch
+ *
+ * @kobj: object representing the sysfs entry
+ * @finish: waiting till it is safe to remove the module with the patch
+ * @name: name of the patch (to appear in sysfs)
+ * @owner: module to refcount on patching
+ * @patches: array of @kgr_patch_fun structures
+ */
+struct kgr_patch {
+	/* internal state information */
+	struct kobject kobj;
+	struct completion finish;
+
+	/* a patch shall set these */
+	const char *name;
+	struct module *owner;
+	struct kgr_patch_fun patches[];
+};
+
+#define kgr_for_each_patch_fun(p, pf)	\
+	for (pf = p->patches; pf->name; pf++)
+
+#define KGR_PATCH(_name, _new_function, abort)	{			\
+		.name = #_name,						\
+		.new_fun = _new_function,				\
+		.abort_if_missing = abort,				\
+	}
+#define KGR_PATCH_END				{ }
+
+extern bool kgr_in_progress;
+
+extern int kgr_patch_kernel(struct kgr_patch *);
+extern void kgr_patch_remove(struct kgr_patch *);
+
+extern int kgr_modify_kernel(struct kgr_patch *patch, bool revert);
+extern int kgr_patch_dir_add(struct kgr_patch *patch);
+extern void kgr_patch_dir_del(struct kgr_patch *patch);
+extern int kgr_add_files(void);
+extern void kgr_remove_files(void);
+
+#endif /* IS_ENABLED(CONFIG_KGRAFT) */
+
+#endif /* LINUX_KGRAFT_H */
