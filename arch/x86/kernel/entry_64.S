@@ -73,6 +73,7 @@
 #ifdef CONFIG_FENTRY_RECORD_LIB
 
 ENTRY(fentry_hook)
+	ASM_NOP2
 	retq
 END(fentry_hook)
 

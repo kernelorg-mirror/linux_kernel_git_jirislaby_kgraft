@@ -17,6 +17,7 @@
 #include <linux/ftrace.h>
 #include <linux/hrtimer.h>
 #include <linux/mm.h>
+#include <linux/memory.h> /* text_mutex */
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
@@ -425,6 +426,11 @@ void __init fentry_init(void)
 	ret = register_module_notifier(&fentry_module_exit_nb);
 	if (ret)
 		pr_warning("Failed to register fentry module exit notifier\n");
+
+	/* now, let's BUG as no more fentries should be called */
+	mutex_lock(&text_mutex);
+	fentry_put_BUG();
+	mutex_unlock(&text_mutex);
 
 	fentry_enabled = true;
 }

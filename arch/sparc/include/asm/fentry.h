@@ -31,6 +31,11 @@ static inline u32 fentry_call_replace(unsigned long ip, unsigned long addr)
 	return call;
 }
 
+static inline void fentry_put_BUG(void)
+{
+	/* to be implemented */
+}
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* CONFIG_FENTRY_RECORD_LIB */

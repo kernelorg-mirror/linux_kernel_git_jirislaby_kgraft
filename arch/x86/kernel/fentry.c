@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/uaccess.h>
 
+#include <asm/alternative.h>
 #include <asm/insn.h>
 #include <asm/nops.h>
 #include <asm/sections.h>
@@ -44,6 +45,14 @@ int fentry_make_nop(struct module *mod,
 	/* Normal cases use add_brk_on_nop */
 	WARN_ONCE(1, "invalid use of ftrace_make_nop");
 	return -EINVAL;
+}
+
+void fentry_put_BUG(void)
+{
+	static const char bug_ins[2] = { 0x0f, 0x0b }; /* ud2 */
+
+	text_poke_bp(fentry_hook, bug_ins, sizeof(bug_ins),
+			fentry_hook + sizeof(bug_ins));
 }
 
 int __init fentry_dyn_arch_init(void)

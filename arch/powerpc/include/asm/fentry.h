@@ -32,6 +32,11 @@ static inline unsigned long fentry_call_adjust(unsigned long addr)
        return addr;
 }
 
+static inline void fentry_put_BUG(void)
+{
+	/* to be implemented */
+}
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* CONFIG_FENTRY_RECORD_LIB */

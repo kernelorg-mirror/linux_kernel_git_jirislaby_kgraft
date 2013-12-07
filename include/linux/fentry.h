@@ -85,6 +85,7 @@ extern bool fentry_enabled;
 extern int fentry_make_nop(struct module *mod,
 			   struct fentry *rec, unsigned long addr);
 
+extern void fentry_put_BUG(void);
 extern void fentry_init(void);
 extern int fentry_dyn_arch_init(void);
 
