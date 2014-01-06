@@ -70,9 +70,7 @@ static notrace void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	struct kgr_patch_fun *p = ops->private;
 	bool go_new;
 
-	if (current->flags & PF_KTHREAD) {
-		go_new = true;
-	} else if (test_bit(0, kgr_immutable)) {
+	if (test_bit(0, kgr_immutable)) {
 		klp_kgraft_mark_task_in_progress(current);
 		go_new = false;
 	} else {
@@ -125,12 +123,7 @@ static bool kgr_still_patching(void)
 
 	read_lock(&tasklist_lock);
 	for_each_process_thread(p, t) {
-		/*
-		 * TODO
-		 *   kernel thread codepaths not supported and silently ignored
-		 */
-		if (klp_kgraft_task_in_progress(t) &&
-				!(t->flags & PF_KTHREAD)) {
+		if (klp_kgraft_task_in_progress(t)) {
 			failed = true;
 			goto unlock;
 		}
@@ -199,6 +192,32 @@ static void kgr_handle_processes(void)
 	read_lock(&tasklist_lock);
 	for_each_process_thread(p, t) {
 		klp_kgraft_mark_task_in_progress(t);
+	}
+	read_unlock(&tasklist_lock);
+}
+
+static void kgr_wakeup_kthreads(void)
+{
+	struct task_struct *p, *t;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(p, t) {
+		/*
+		 * Wake up kthreads, they will clean the progress flag.
+		 *
+		 * There is a small race here. We could see TIF_KGR_IN_PROGRESS
+		 * set and decide to wake up a kthread. Meanwhile the kthread
+		 * could migrate itself and the waking up would be meaningless.
+		 * It is not serious though.
+		 */
+		if ((t->flags & PF_KTHREAD) &&
+				klp_kgraft_task_in_progress(t)) {
+			/*
+			 * this is incorrect for kthreads waiting still for
+			 * their first wake_up.
+			 */
+			wake_up_process(t);
+		}
 	}
 	read_unlock(&tasklist_lock);
 }
@@ -404,6 +423,12 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	clear_bit(0, kgr_immutable);
 
 	/*
+	 * There is no need to have an explicit barrier here. wake_up_process()
+	 * implies a write barrier. That is every woken up task sees
+	 * kgr_immutable cleared.
+	 */
+	kgr_wakeup_kthreads();
+	/*
 	 * give everyone time to exit kernel, and check after a while
 	 */
 	queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
@@ -419,8 +444,7 @@ err_unlock:
  * kgr_patch_kernel -- the entry for a kgraft patch
  * @patch: patch to be applied
  *
- * Start patching of code that is neither running in IRQ context nor
- * kernel thread.
+ * Start patching of code that is not running in IRQ context.
  */
 int kgr_patch_kernel(struct kgr_patch *patch)
 {
