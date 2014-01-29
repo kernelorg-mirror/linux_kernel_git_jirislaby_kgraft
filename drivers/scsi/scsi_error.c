@@ -2180,6 +2180,8 @@ int scsi_error_handler(void *data)
 	 * disables signal delivery for the created thread.
 	 */
 	while (true) {
+		klp_kgraft_mark_task_safe(current);
+
 		/*
 		 * The sequence in kthread_stop() sets the stop flag first
 		 * then wakes the process.  To avoid missed wakeups, the task
