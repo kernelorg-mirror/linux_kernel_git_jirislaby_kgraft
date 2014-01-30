@@ -18,6 +18,7 @@
 #define LINUX_KGRAFT_H
 
 #include <linux/bitops.h>
+#include <linux/compiler.h>
 #include <linux/kobject.h>
 #include <linux/ftrace.h>
 #include <linux/sched.h>
@@ -27,6 +28,8 @@
 #include <asm/kgraft.h>
 
 #define KGR_TIMEOUT 2
+
+struct kgr_patch;
 
 /**
  * struct kgr_patch_fun -- state of a single function in a kGraft patch
@@ -38,6 +41,8 @@
  * @ftrace_ops_fast: ftrace ops for fast () stub
  */
 struct kgr_patch_fun {
+	struct kgr_patch *patch;
+
 	const char *name;
 	void *new_fun;
 

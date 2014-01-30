@@ -17,10 +17,12 @@
 #include <linux/bitmap.h>
 #include <linux/bug.h>
 #include <linux/ftrace.h>
+#include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/kallsyms.h>
 #include <linux/kgraft.h>
 #include <linux/livepatch.h>
 #include <linux/module.h>
+#include <linux/percpu.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
@@ -35,6 +37,7 @@ static void kgr_work_fn(struct work_struct *work);
 static struct workqueue_struct *kgr_wq;
 static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
+static bool __percpu *kgr_irq_use_new;
 bool kgr_in_progress;
 static bool kgr_initialized;
 static struct kgr_patch *kgr_patch;
@@ -70,7 +73,9 @@ static notrace void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	struct kgr_patch_fun *p = ops->private;
 	bool go_new;
 
-	if (test_bit(0, kgr_immutable)) {
+	if (in_interrupt()) {
+		go_new = *this_cpu_ptr(kgr_irq_use_new);
+	} else if (test_bit(0, kgr_immutable)) {
 		klp_kgraft_mark_task_in_progress(current);
 		go_new = false;
 	} else {
@@ -149,6 +154,8 @@ static void kgr_finalize(void)
 			BUG();
 		}
 	}
+
+	free_percpu(kgr_irq_use_new);
 
 	if (kgr_revert)
 		module_put(kgr_patch->owner);
@@ -243,6 +250,20 @@ static unsigned long kgr_get_function_address(const struct kgr_patch_fun *pf)
 	}
 
 	return orig_addr;
+}
+
+static void kgr_handle_irq_cpu(struct work_struct *work)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	*this_cpu_ptr(kgr_irq_use_new) = true;
+	local_irq_restore(flags);
+}
+
+static void kgr_handle_irqs(void)
+{
+	schedule_on_each_cpu(kgr_handle_irq_cpu);
 }
 
 static int kgr_switch_fops(struct kgr_patch_fun *patch_fun,
@@ -391,6 +412,13 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
+	kgr_irq_use_new = alloc_percpu(bool);
+	if (!kgr_irq_use_new) {
+		pr_err("kgr: can't patch, cannot allocate percpu data\n");
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
+
 	pr_info("kgr: %sing patch '%s'\n", revert ? "revert" : "apply",
 			patch->name);
 
@@ -398,6 +426,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	wmb(); /* set_bit before kgr_handle_processes */
 
 	kgr_for_each_patch_fun(patch, patch_fun) {
+		patch_fun->patch = patch;
+
 		ret = kgr_patch_code(patch_fun, false, revert);
 		/*
 		 * In case any of the symbol resolutions in the set
@@ -410,7 +440,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 				if (patch_fun->state == KGR_PATCH_SLOW)
 					kgr_ftrace_disable(patch_fun,
 						&patch_fun->ftrace_ops_slow);
-			goto err_unlock;
+			goto err_free;
 		}
 	}
 	kgr_in_progress = true;
@@ -418,6 +448,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	kgr_revert = revert;
 	mutex_unlock(&kgr_in_progress_lock);
 
+	kgr_handle_irqs();
 	kgr_handle_processes();
 	wmb(); /* clear_bit after kgr_handle_processes */
 	clear_bit(0, kgr_immutable);
@@ -434,6 +465,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
 
 	return 0;
+err_free:
+	free_percpu(kgr_irq_use_new);
 err_unlock:
 	mutex_unlock(&kgr_in_progress_lock);
 
@@ -444,7 +477,7 @@ err_unlock:
  * kgr_patch_kernel -- the entry for a kgraft patch
  * @patch: patch to be applied
  *
- * Start patching of code that is not running in IRQ context.
+ * Start patching of code.
  */
 int kgr_patch_kernel(struct kgr_patch *patch)
 {
