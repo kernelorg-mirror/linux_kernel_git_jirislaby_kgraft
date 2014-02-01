@@ -370,7 +370,7 @@ if ($arch eq "x86_64") {
     $type = ".quad";
     $alignment = 8;
 } else {
-    die "Arch $arch is not supported with CONFIG_FTRACE_MCOUNT_RECORD";
+    die "Arch $arch is not supported with CONFIG_FENTRY_RECORD";
 }
 
 my $text_found = 0;

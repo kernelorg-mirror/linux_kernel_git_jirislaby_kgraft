@@ -12,7 +12,7 @@
 #include <asm/desc.h>
 #include <asm/ftrace.h>
 
-#ifdef CONFIG_FUNCTION_TRACER
+#ifdef CONFIG_FENTRY_RECORD_LIB
 /* mcount and __fentry__ are defined in assembly */
 #ifdef CC_USING_FENTRY
 EXPORT_SYMBOL(__fentry__);

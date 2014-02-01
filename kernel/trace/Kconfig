@@ -42,11 +42,6 @@ config HAVE_DYNAMIC_FTRACE
 config HAVE_DYNAMIC_FTRACE_WITH_REGS
 	bool
 
-config HAVE_FTRACE_MCOUNT_RECORD
-	bool
-	help
-	  See Documentation/trace/ftrace-design.txt
-
 config HAVE_SYSCALL_TRACEPOINTS
 	bool
 	help
@@ -140,9 +135,11 @@ if FTRACE
 config FUNCTION_TRACER
 	bool "Kernel Function Tracer"
 	depends on HAVE_FUNCTION_TRACER
+	depends on HAVE_FENTRY_RECORD
 	select KALLSYMS
 	select GENERIC_TRACER
 	select CONTEXT_SWITCH_TRACER
+	select FENTRY_RECORD
 	help
 	  Enable the kernel to trace every kernel function. This is done
 	  by using a compiler feature to insert a small, 5-byte No-Operation
@@ -444,6 +441,7 @@ config DYNAMIC_FTRACE
 	bool "enable/disable function tracing dynamically"
 	depends on FUNCTION_TRACER
 	depends on HAVE_DYNAMIC_FTRACE
+	select FENTRY_RECORD_LIB
 	default y
 	help
 	  This option will modify all the calls to function tracing
@@ -481,11 +479,6 @@ config FUNCTION_PROFILER
 	  have been hit and their counters.
 
 	  If in doubt, say N.
-
-config FTRACE_MCOUNT_RECORD
-	def_bool y
-	depends on DYNAMIC_FTRACE
-	depends on HAVE_FTRACE_MCOUNT_RECORD
 
 config FTRACE_SELFTEST
 	bool

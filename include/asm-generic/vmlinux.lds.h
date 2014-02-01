@@ -84,7 +84,7 @@
 #define MEM_DISCARD(sec) *(.mem##sec)
 #endif
 
-#ifdef CONFIG_FTRACE_MCOUNT_RECORD
+#ifdef CONFIG_FENTRY_RECORD_LIB
 #define MCOUNT_REC()	. = ALIGN(8);				\
 			VMLINUX_SYMBOL(__start_mcount_loc) = .; \
 			*(__mcount_loc)				\

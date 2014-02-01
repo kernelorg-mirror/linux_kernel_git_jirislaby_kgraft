@@ -271,7 +271,7 @@ cmd_modversions =								\
 	fi;
 endif
 
-ifdef CONFIG_FTRACE_MCOUNT_RECORD
+ifdef CONFIG_FENTRY_RECORD_LIB
 ifdef BUILD_C_RECORDMCOUNT
 ifeq ("$(origin RECORDMCOUNT_WARN)", "command line")
   RECORDMCOUNT_FLAGS = -w

@@ -460,4 +460,17 @@ config UCS2_STRING
 
 source "lib/fonts/Kconfig"
 
+config HAVE_FENTRY_RECORD
+	bool
+	help
+	  See Documentation/trace/ftrace-design.txt
+
+config FENTRY_RECORD
+	bool
+	depends on HAVE_FENTRY_RECORD
+
+config FENTRY_RECORD_LIB
+	bool
+	depends on FENTRY_RECORD
+
 endmenu

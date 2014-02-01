@@ -69,7 +69,7 @@
 	.code64
 	.section .entry.text, "ax"
 
-#ifdef CONFIG_FUNCTION_TRACER
+#ifdef CONFIG_FENTRY_RECORD
 
 #ifdef CC_USING_FENTRY
 # define function_hook	__fentry__
@@ -77,12 +77,18 @@
 # define function_hook	mcount
 #endif
 
-#ifdef CONFIG_DYNAMIC_FTRACE
+#ifdef CONFIG_FENTRY_RECORD_LIB
 
 ENTRY(function_hook)
 	retq
 END(function_hook)
 
+#endif /* CONFIG_FENTRY_RECORD_LIB */
+#endif /* CONFIG_FENTRY_RECORD */
+
+#ifdef CONFIG_FUNCTION_TRACER
+
+#ifdef CONFIG_DYNAMIC_FTRACE
 /* skip is set if stack has been adjusted */
 .macro ftrace_caller_setup skip=0
 	MCOUNT_SAVE_FRAME \skip

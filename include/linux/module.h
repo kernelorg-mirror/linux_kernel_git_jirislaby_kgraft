@@ -353,7 +353,7 @@ struct module {
 	struct ftrace_event_call **trace_events;
 	unsigned int num_trace_events;
 #endif
-#ifdef CONFIG_FTRACE_MCOUNT_RECORD
+#ifdef CONFIG_FENTRY_RECORD_LIB
 	unsigned int num_ftrace_callsites;
 	unsigned long *ftrace_callsites;
 #endif

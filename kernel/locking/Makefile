@@ -1,7 +1,7 @@
 
 obj-y += mutex.o semaphore.o rwsem.o mcs_spinlock.o
 
-ifdef CONFIG_FUNCTION_TRACER
+ifdef CONFIG_FENTRY_RECORD
 CFLAGS_REMOVE_lockdep.o = -pg
 CFLAGS_REMOVE_lockdep_proc.o = -pg
 CFLAGS_REMOVE_mutex-debug.o = -pg

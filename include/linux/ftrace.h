@@ -654,7 +654,7 @@ static inline void __ftrace_enabled_restore(int enabled)
 # define trace_preempt_off(a0, a1) do { } while (0)
 #endif
 
-#ifdef CONFIG_FTRACE_MCOUNT_RECORD
+#ifdef CONFIG_DYNAMIC_FTRACE
 extern void ftrace_init(void);
 #else
 static inline void ftrace_init(void) { }
