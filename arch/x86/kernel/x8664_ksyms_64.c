@@ -10,15 +10,11 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 #include <asm/desc.h>
-#include <asm/ftrace.h>
+#include <asm/fentry.h>
 
 #ifdef CONFIG_FENTRY_RECORD_LIB
 /* mcount and __fentry__ are defined in assembly */
-#ifdef CC_USING_FENTRY
-EXPORT_SYMBOL(__fentry__);
-#else
-EXPORT_SYMBOL(mcount);
-#endif
+EXPORT_SYMBOL(fentry_hook);
 #endif
 
 EXPORT_SYMBOL(__get_user_1);

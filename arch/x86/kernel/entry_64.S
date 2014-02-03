@@ -52,6 +52,7 @@
 #include <asm/hw_irq.h>
 #include <asm/page_types.h>
 #include <asm/irqflags.h>
+#include <asm/fentry.h>
 #include <asm/paravirt.h>
 #include <asm/ftrace.h>
 #include <asm/percpu.h>
@@ -69,22 +70,13 @@
 	.code64
 	.section .entry.text, "ax"
 
-#ifdef CONFIG_FENTRY_RECORD
-
-#ifdef CC_USING_FENTRY
-# define function_hook	__fentry__
-#else
-# define function_hook	mcount
-#endif
-
 #ifdef CONFIG_FENTRY_RECORD_LIB
 
-ENTRY(function_hook)
+ENTRY(fentry_hook)
 	retq
-END(function_hook)
+END(fentry_hook)
 
 #endif /* CONFIG_FENTRY_RECORD_LIB */
-#endif /* CONFIG_FENTRY_RECORD */
 
 #ifdef CONFIG_FUNCTION_TRACER
 
@@ -202,7 +194,7 @@ END(ftrace_regs_caller)
 
 #else /* ! CONFIG_DYNAMIC_FTRACE */
 
-ENTRY(function_hook)
+ENTRY(fentry_hook)
 	cmpl $0, function_trace_stop
 	jne  ftrace_stub
 
@@ -236,7 +228,7 @@ trace:
 	MCOUNT_RESTORE_FRAME
 
 	jmp ftrace_stub
-END(function_hook)
+END(fentry_hook)
 #endif /* CONFIG_DYNAMIC_FTRACE */
 #endif /* CONFIG_FUNCTION_TRACER */
 

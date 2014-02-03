@@ -1,6 +1,8 @@
 #ifndef _ASM_X86_FTRACE_H
 #define _ASM_X86_FTRACE_H
 
+#include <asm/fentry.h>
+
 #ifdef __ASSEMBLY__
 
 	/* skip is set if the stack was already partially adjusted */
@@ -35,11 +37,7 @@
 #endif
 
 #ifdef CONFIG_FUNCTION_TRACER
-#ifdef CC_USING_FENTRY
-# define MCOUNT_ADDR		((long)(__fentry__))
-#else
-# define MCOUNT_ADDR		((long)(mcount))
-#endif
+#define MCOUNT_ADDR		((long)(fentry_hook))
 #define MCOUNT_INSN_SIZE	5 /* sizeof mcount call */
 
 #ifdef CONFIG_DYNAMIC_FTRACE
@@ -47,9 +45,7 @@
 #endif
 
 #ifndef __ASSEMBLY__
-extern void mcount(void);
 extern atomic_t modifying_ftrace_code;
-extern void __fentry__(void);
 
 static inline unsigned long ftrace_call_adjust(unsigned long addr)
 {
