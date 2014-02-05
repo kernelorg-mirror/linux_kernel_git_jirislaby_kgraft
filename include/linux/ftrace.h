@@ -482,6 +482,8 @@ extern int skip_trace(unsigned long ip);
 
 extern void ftrace_disable_daemon(void);
 extern void ftrace_enable_daemon(void);
+
+extern int ftrace_init_install(struct module *mod, struct fentry_page *new_pgs);
 #else /* CONFIG_DYNAMIC_FTRACE */
 static inline int skip_trace(unsigned long ip) { return 0; }
 static inline int ftrace_force_update(void) { return 0; }
@@ -523,6 +525,15 @@ static inline ssize_t ftrace_notrace_write(struct file *file, const char __user 
 			     size_t cnt, loff_t *ppos) { return -ENODEV; }
 static inline int
 ftrace_regex_release(struct inode *inode, struct file *file) { return -ENODEV; }
+
+#ifdef CONFIG_FENTRY_RECORD_LIB
+static inline int ftrace_init_install(struct module *mod,
+		struct fentry_page *new_pgs)
+{
+	return 0;
+}
+#endif /* CONFIG_FENTRY_RECORD_LIB */
+
 #endif /* CONFIG_DYNAMIC_FTRACE */
 
 /* totally disable ftrace - can not re-enable after this */

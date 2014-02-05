@@ -2,6 +2,7 @@
 #define LINUX_FENTRY_H
 
 #include <linux/module.h>
+#include <linux/mutex.h>
 
 #include <asm/fentry.h>
 
@@ -46,7 +47,10 @@ struct fentry_page {
 	int			size;
 };
 
+extern struct mutex fentry_lock;
 extern struct fentry_page *fentry_pages_start;
+extern unsigned long fentry_count;
+extern bool fentry_enabled;
 
 /**
  * fentry_make_nop - convert code into nop
@@ -72,7 +76,17 @@ extern struct fentry_page *fentry_pages_start;
 extern int fentry_make_nop(struct module *mod,
 			   struct fentry *rec, unsigned long addr);
 
+extern void fentry_init(void);
 extern int fentry_dyn_arch_init(void);
+
+static inline bool fentry_fine(void)
+{
+	return fentry_enabled;
+}
+
+#else /* CONFIG_FENTRY_RECORD_LIB */
+
+static inline void fentry_init(void) { }
 
 #endif /* CONFIG_FENTRY_RECORD_LIB */
 

@@ -42,6 +42,7 @@
 #include <linux/cpuset.h>
 #include <linux/cgroup.h>
 #include <linux/efi.h>
+#include <linux/fentry.h>
 #include <linux/tick.h>
 #include <linux/interrupt.h>
 #include <linux/taskstats_kern.h>
@@ -646,6 +647,7 @@ asmlinkage void __init start_kernel(void)
 		efi_free_boot_services();
 	}
 
+	fentry_init();
 	ftrace_init();
 
 	/* Do the rest non-__init'ed, we're now alive */

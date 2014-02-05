@@ -6369,7 +6369,7 @@ static __init int tracer_init_debugfs(void)
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 	trace_create_file("dyn_ftrace_total_info", 0444, d_tracer,
-			&ftrace_update_tot_cnt, &tracing_dyn_info_fops);
+			&fentry_count, &tracing_dyn_info_fops);
 #endif
 
 	create_trace_instances(d_tracer);
