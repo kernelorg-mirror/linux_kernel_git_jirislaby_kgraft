@@ -12,6 +12,7 @@
 #include <linux/stop_machine.h>
 #include <linux/slab.h>
 #include <linux/kdebug.h>
+#include <linux/uaccess.h>
 #include <asm/alternative.h>
 #include <asm/sections.h>
 #include <asm/pgtable.h>
@@ -676,3 +677,59 @@ void *text_poke_bp(void *addr, const void *opcode, size_t len, void *handler)
 	return addr;
 }
 
+static inline bool
+within(unsigned long addr, unsigned long start, unsigned long end)
+{
+	return addr >= start && addr < end;
+}
+
+static unsigned long text_ip_addr(unsigned long ip)
+{
+	/*
+	 * On x86_64, kernel text mappings are mapped read-only with
+	 * CONFIG_DEBUG_RODATA. So we use the kernel identity mapping instead
+	 * of the kernel text mapping to modify the kernel text.
+	 *
+	 * For 32bit kernels, these mappings are same and we can use
+	 * kernel identity mapping to modify code.
+	 */
+	if (within(ip, (unsigned long)_text, (unsigned long)_etext))
+		ip = (unsigned long)__va(__pa_symbol(ip));
+
+	return ip;
+}
+
+/**
+ * text_poke_direct() -- update instructions on unused code
+ * @addr:	address to patch
+ * @opcode:	opcode of new instruction
+ * @len:	length to copy
+ * @handler:	address to jump to when the temporary breakpoint is hit
+ *
+ * Note: Due to modules and __init, code can disappear and change, we need to
+ * protect against faulting as well as code changing. We do this by using the
+ * probe_kernel_* functions.
+ *
+ * No real locking needed, this code has to run through kstop_machine, or
+ * before SMP starts.
+ */
+int text_poke_direct(unsigned long addr, unsigned const char *old_code,
+		   unsigned const char *new_code, unsigned int size)
+{
+	unsigned char replaced[size];
+
+	if (probe_kernel_read(replaced, (void *)addr, size))
+		return -EFAULT;
+
+	if (memcmp(replaced, old_code, size) != 0)
+		return -EINVAL;
+
+	addr = text_ip_addr(addr);
+
+	if (probe_kernel_write((void *)addr, new_code, size))
+		return -EPERM;
+
+	sync_core();
+
+	return 0;
+}

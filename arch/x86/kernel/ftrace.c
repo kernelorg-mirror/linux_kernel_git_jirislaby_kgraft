@@ -77,60 +77,9 @@ within(unsigned long addr, unsigned long start, unsigned long end)
 	return addr >= start && addr < end;
 }
 
-static unsigned long text_ip_addr(unsigned long ip)
-{
-	/*
-	 * On x86_64, kernel text mappings are mapped read-only with
-	 * CONFIG_DEBUG_RODATA. So we use the kernel identity mapping instead
-	 * of the kernel text mapping to modify the kernel text.
-	 *
-	 * For 32bit kernels, these mappings are same and we can use
-	 * kernel identity mapping to modify code.
-	 */
-	if (within(ip, (unsigned long)_text, (unsigned long)_etext))
-		ip = (unsigned long)__va(__pa_symbol(ip));
-
-	return ip;
-}
-
 static const unsigned char *ftrace_nop_replace(void)
 {
 	return ideal_nops[NOP_ATOMIC5];
-}
-
-static int
-ftrace_modify_code_direct(unsigned long ip, unsigned const char *old_code,
-		   unsigned const char *new_code, unsigned int size)
-{
-	unsigned char replaced[size];
-
-	/*
-	 * Note: Due to modules and __init, code can
-	 *  disappear and change, we need to protect against faulting
-	 *  as well as code changing. We do this by using the
-	 *  probe_kernel_* functions.
-	 *
-	 * No real locking needed, this code is run through
-	 * kstop_machine, or before SMP starts.
-	 */
-
-	/* read the text we want to modify */
-	if (probe_kernel_read(replaced, (void *)ip, size))
-		return -EFAULT;
-
-	/* Make sure it is what we expect it to be */
-	if (memcmp(replaced, old_code, size) != 0)
-		return -EINVAL;
-
-	ip = text_ip_addr(ip);
-
-	/* replace the text with the new text */
-	if (probe_kernel_write((void *)ip, new_code, size))
-		return -EPERM;
-
-	sync_core();
-
-	return 0;
 }
 
 int ftrace_make_nop(struct module *mod,
@@ -151,8 +100,7 @@ int ftrace_make_nop(struct module *mod,
 	 * just modify the code directly.
 	 */
 	if (addr == MCOUNT_ADDR)
-		return ftrace_modify_code_direct(rec->ip, old, new,
-				MCOUNT_INSN_SIZE);
+		return text_poke_direct(rec->ip, old, new, MCOUNT_INSN_SIZE);
 
 	/* Normal cases use add_brk_on_nop */
 	WARN_ONCE(1, "invalid use of ftrace_make_nop");
@@ -168,7 +116,7 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 	new = ftrace_call_replace(ip, addr);
 
 	/* Should only be called when module is loaded */
-	return ftrace_modify_code_direct(rec->ip, old, new, MCOUNT_INSN_SIZE);
+	return text_poke_direct(rec->ip, old, new, MCOUNT_INSN_SIZE);
 }
 
 /*

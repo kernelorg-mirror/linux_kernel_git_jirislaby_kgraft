@@ -227,5 +227,7 @@ extern void *text_poke_early(void *addr, const void *opcode, size_t len);
 extern void *text_poke(void *addr, const void *opcode, size_t len);
 extern int poke_int3_handler(struct pt_regs *regs);
 extern void *text_poke_bp(void *addr, const void *opcode, size_t len, void *handler);
+extern int text_poke_direct(unsigned long addr, unsigned const char *old_code,
+		unsigned const char *new_code, unsigned int size);
 
 #endif /* _ASM_X86_ALTERNATIVE_H */
