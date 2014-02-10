@@ -100,9 +100,9 @@ static const unsigned char *ftrace_nop_replace(void)
 
 static int
 ftrace_modify_code_direct(unsigned long ip, unsigned const char *old_code,
-		   unsigned const char *new_code)
+		   unsigned const char *new_code, unsigned int size)
 {
-	unsigned char replaced[MCOUNT_INSN_SIZE];
+	unsigned char replaced[size];
 
 	/*
 	 * Note: Due to modules and __init, code can
@@ -115,17 +115,17 @@ ftrace_modify_code_direct(unsigned long ip, unsigned const char *old_code,
 	 */
 
 	/* read the text we want to modify */
-	if (probe_kernel_read(replaced, (void *)ip, MCOUNT_INSN_SIZE))
+	if (probe_kernel_read(replaced, (void *)ip, size))
 		return -EFAULT;
 
 	/* Make sure it is what we expect it to be */
-	if (memcmp(replaced, old_code, MCOUNT_INSN_SIZE) != 0)
+	if (memcmp(replaced, old_code, size) != 0)
 		return -EINVAL;
 
 	ip = text_ip_addr(ip);
 
 	/* replace the text with the new text */
-	if (probe_kernel_write((void *)ip, new_code, MCOUNT_INSN_SIZE))
+	if (probe_kernel_write((void *)ip, new_code, size))
 		return -EPERM;
 
 	sync_core();
@@ -151,7 +151,8 @@ int ftrace_make_nop(struct module *mod,
 	 * just modify the code directly.
 	 */
 	if (addr == MCOUNT_ADDR)
-		return ftrace_modify_code_direct(rec->ip, old, new);
+		return ftrace_modify_code_direct(rec->ip, old, new,
+				MCOUNT_INSN_SIZE);
 
 	/* Normal cases use add_brk_on_nop */
 	WARN_ONCE(1, "invalid use of ftrace_make_nop");
@@ -167,7 +168,7 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 	new = ftrace_call_replace(ip, addr);
 
 	/* Should only be called when module is loaded */
-	return ftrace_modify_code_direct(rec->ip, old, new);
+	return ftrace_modify_code_direct(rec->ip, old, new, MCOUNT_INSN_SIZE);
 }
 
 /*
