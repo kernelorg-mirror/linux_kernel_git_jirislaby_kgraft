@@ -44,7 +44,7 @@ int ftrace_arch_code_modify_post_process(void)
 	return 0;
 }
 
-union ftrace_code_union {
+union insn_call_jmp_union {
 	char code[MCOUNT_INSN_SIZE];
 	struct {
 		char e8;
@@ -57,18 +57,11 @@ static int ftrace_calc_offset(long ip, long addr)
 	return (int)(addr - ip);
 }
 
-static unsigned char *ftrace_call_replace(unsigned long ip, unsigned long addr)
+static void ftrace_call_replace(union insn_call_jmp_union *insn,
+		unsigned long ip, unsigned long addr)
 {
-	static union ftrace_code_union calc;
-
-	calc.e8		= 0xe8;
-	calc.offset	= ftrace_calc_offset(ip + MCOUNT_INSN_SIZE, addr);
-
-	/*
-	 * No locking needed, this must be called via kstop_machine
-	 * which in essence is like running on a uniprocessor machine.
-	 */
-	return calc.code;
+	insn->e8 = 0xe8;
+	insn->offset = ftrace_calc_offset(ip + MCOUNT_INSN_SIZE, addr);
 }
 
 static inline int
@@ -85,10 +78,11 @@ static const unsigned char *ftrace_nop_replace(void)
 int ftrace_make_nop(struct module *mod,
 		    struct dyn_ftrace *rec, unsigned long addr)
 {
-	unsigned const char *new, *old;
+	union insn_call_jmp_union insn;
+	unsigned const char *new;
 	unsigned long ip = rec->ip;
 
-	old = ftrace_call_replace(ip, addr);
+	ftrace_call_replace(&insn, ip, addr);
 	new = ftrace_nop_replace();
 
 	/*
@@ -100,7 +94,8 @@ int ftrace_make_nop(struct module *mod,
 	 * just modify the code directly.
 	 */
 	if (addr == MCOUNT_ADDR)
-		return text_poke_direct(rec->ip, old, new, MCOUNT_INSN_SIZE);
+		return text_poke_direct(rec->ip, insn.code, new,
+				MCOUNT_INSN_SIZE);
 
 	/* Normal cases use add_brk_on_nop */
 	WARN_ONCE(1, "invalid use of ftrace_make_nop");
@@ -109,14 +104,15 @@ int ftrace_make_nop(struct module *mod,
 
 int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 {
-	unsigned const char *new, *old;
+	union insn_call_jmp_union insn;
+	unsigned const char *old;
 	unsigned long ip = rec->ip;
 
 	old = ftrace_nop_replace();
-	new = ftrace_call_replace(ip, addr);
+	ftrace_call_replace(&insn, ip, addr);
 
 	/* Should only be called when module is loaded */
-	return text_poke_direct(rec->ip, old, new, MCOUNT_INSN_SIZE);
+	return text_poke_direct(rec->ip, old, insn.code, MCOUNT_INSN_SIZE);
 }
 
 /*
@@ -196,18 +192,18 @@ static int update_ftrace_func(unsigned long ip, void *new)
 
 int ftrace_update_ftrace_func(ftrace_func_t func)
 {
+	union insn_call_jmp_union insn;
 	unsigned long ip = (unsigned long)(&ftrace_call);
-	unsigned char *new;
 	int ret;
 
-	new = ftrace_call_replace(ip, (unsigned long)func);
-	ret = update_ftrace_func(ip, new);
+	ftrace_call_replace(&insn, ip, (unsigned long)func);
+	ret = update_ftrace_func(ip, insn.code);
 
 	/* Also update the regs callback function */
 	if (!ret) {
 		ip = (unsigned long)(&ftrace_regs_call);
-		new = ftrace_call_replace(ip, (unsigned long)func);
-		ret = update_ftrace_func(ip, new);
+		ftrace_call_replace(&insn, ip, (unsigned long)func);
+		ret = update_ftrace_func(ip, insn.code);
 	}
 
 	return ret;
@@ -280,12 +276,12 @@ static int add_break(unsigned long ip, const char *old)
 
 static int add_brk_on_call(struct dyn_ftrace *rec, unsigned long addr)
 {
-	unsigned const char *old;
+	union insn_call_jmp_union insn;
 	unsigned long ip = rec->ip;
 
-	old = ftrace_call_replace(ip, addr);
+	ftrace_call_replace(&insn, ip, addr);
 
-	return add_break(rec->ip, old);
+	return add_break(rec->ip, insn.code);
 }
 
 
@@ -362,6 +358,7 @@ static int add_breakpoints(struct dyn_ftrace *rec, int enable)
  */
 static int remove_breakpoint(struct dyn_ftrace *rec)
 {
+	union insn_call_jmp_union insn;
 	unsigned char ins[MCOUNT_INSN_SIZE];
 	unsigned char brk = BREAKPOINT_INSTRUCTION;
 	const unsigned char *nop;
@@ -390,16 +387,16 @@ static int remove_breakpoint(struct dyn_ftrace *rec)
 		 * a disaster.
 		 */
 		ftrace_addr = get_ftrace_addr(rec);
-		nop = ftrace_call_replace(ip, ftrace_addr);
+		ftrace_call_replace(&insn, ip, ftrace_addr);
 
-		if (memcmp(&ins[1], &nop[1], MCOUNT_INSN_SIZE - 1) == 0)
+		if (memcmp(&ins[1], &insn.code[1], MCOUNT_INSN_SIZE - 1) == 0)
 			goto update;
 
 		/* Check both ftrace_addr and ftrace_old_addr */
 		ftrace_addr = get_ftrace_old_addr(rec);
-		nop = ftrace_call_replace(ip, ftrace_addr);
+		ftrace_call_replace(&insn, ip, ftrace_addr);
 
-		if (memcmp(&ins[1], &nop[1], MCOUNT_INSN_SIZE - 1) != 0)
+		if (memcmp(&ins[1], &insn.code[1], MCOUNT_INSN_SIZE - 1) != 0)
 			return -EINVAL;
 	}
 
@@ -417,11 +414,11 @@ static int add_update_code(unsigned long ip, unsigned const char *new)
 
 static int add_update_call(struct dyn_ftrace *rec, unsigned long addr)
 {
+	union insn_call_jmp_union insn;
 	unsigned long ip = rec->ip;
-	unsigned const char *new;
 
-	new = ftrace_call_replace(ip, addr);
-	return add_update_code(ip, new);
+	ftrace_call_replace(&insn, ip, addr);
+	return add_update_code(ip, insn.code);
 }
 
 static int add_update_nop(struct dyn_ftrace *rec)
@@ -462,12 +459,12 @@ static int add_update(struct dyn_ftrace *rec, int enable)
 
 static int finish_update_call(struct dyn_ftrace *rec, unsigned long addr)
 {
+	union insn_call_jmp_union insn;
 	unsigned long ip = rec->ip;
-	unsigned const char *new;
 
-	new = ftrace_call_replace(ip, addr);
+	ftrace_call_replace(&insn, ip, addr);
 
-	return ftrace_write(ip, new, 1);
+	return ftrace_write(ip, insn.code, 1);
 }
 
 static int finish_update_nop(struct dyn_ftrace *rec)
@@ -640,27 +637,21 @@ int __init ftrace_dyn_arch_init(void)
 #ifdef CONFIG_DYNAMIC_FTRACE
 extern void ftrace_graph_call(void);
 
-static unsigned char *ftrace_jmp_replace(unsigned long ip, unsigned long addr)
+static void ftrace_jmp_replace(union insn_call_jmp_union *calc, unsigned long ip,
+		unsigned long addr)
 {
-	static union ftrace_code_union calc;
-
 	/* Jmp not a call (ignore the .e8) */
-	calc.e8		= 0xe9;
-	calc.offset	= ftrace_calc_offset(ip + MCOUNT_INSN_SIZE, addr);
-
-	/*
-	 * ftrace external locks synchronize the access to the static variable.
-	 */
-	return calc.code;
+	calc->e8 = 0xe9;
+	calc->offset = ftrace_calc_offset(ip + MCOUNT_INSN_SIZE, addr);
 }
 
 static int ftrace_mod_jmp(unsigned long ip, void *func)
 {
-	unsigned char *new;
+	union insn_call_jmp_union insn;
 
-	new = ftrace_jmp_replace(ip, (unsigned long)func);
+	ftrace_jmp_replace(&insn, ip, (unsigned long)func);
 
-	return update_ftrace_func(ip, new);
+	return update_ftrace_func(ip, insn.code);
 }
 
 int ftrace_enable_ftrace_graph_caller(void)
