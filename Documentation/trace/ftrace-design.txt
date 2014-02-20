@@ -274,8 +274,8 @@ scroll your reader back up if you got over eager.
 Once those are out of the way, you will need to implement:
 	- asm/ftrace.h:
 		- MCOUNT_ADDR
-		- ftrace_call_adjust()
-		- struct dyn_arch_ftrace{}
+		- fentry_call_adjust()
+		- struct fentry_arch {}
 	- asm code:
 		- mcount() (new stub)
 		- ftrace_caller()
@@ -294,18 +294,18 @@ Define MCOUNT_ADDR as the address of your mcount symbol similar to:
 Since no one else will have a decl for that function, you will need to:
 	extern void mcount(void);
 
-You will also need the helper function ftrace_call_adjust().  Most people
+You will also need the helper function fentry_call_adjust().  Most people
 will be able to stub it out like so:
-	static inline unsigned long ftrace_call_adjust(unsigned long addr)
+	static inline unsigned long fentry_call_adjust(unsigned long addr)
 	{
 		return addr;
 	}
 <details to be filled>
 
-Lastly you will need the custom dyn_arch_ftrace structure.  If you need
+Lastly you will need the custom fentry_arch structure.  If you need
 some extra state when runtime patching arbitrary call sites, this is the
 place.  For now though, create an empty struct:
-	struct dyn_arch_ftrace {
+	struct fentry_arch {
 		/* No extra data needed */
 	};
 

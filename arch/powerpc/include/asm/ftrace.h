@@ -46,13 +46,13 @@
 extern void _mcount(void);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
-static inline unsigned long ftrace_call_adjust(unsigned long addr)
+static inline unsigned long fentry_call_adjust(unsigned long addr)
 {
        /* reloction of mcount call site is the same as the address */
        return addr;
 }
 
-struct dyn_arch_ftrace {
+struct fentry_arch {
 	struct module *mod;
 };
 #endif /*  CONFIG_DYNAMIC_FTRACE */

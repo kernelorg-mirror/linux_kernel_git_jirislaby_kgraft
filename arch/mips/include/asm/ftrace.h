@@ -76,12 +76,12 @@ do {						\
 
 
 #ifdef CONFIG_DYNAMIC_FTRACE
-static inline unsigned long ftrace_call_adjust(unsigned long addr)
+static inline unsigned long fentry_call_adjust(unsigned long addr)
 {
 	return addr;
 }
 
-struct dyn_arch_ftrace {
+struct fentry_arch {
 };
 
 #endif /*  CONFIG_DYNAMIC_FTRACE */

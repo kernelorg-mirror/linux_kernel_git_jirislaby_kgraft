@@ -4225,7 +4225,7 @@ static int ftrace_process_locs(struct module *mod,
 	p = start;
 	pg = start_pg;
 	while (p < end) {
-		addr = ftrace_call_adjust(*p++);
+		addr = fentry_call_adjust(*p++);
 		/*
 		 * Some architecture linkers will pad between
 		 * the different mcount_loc sections of different

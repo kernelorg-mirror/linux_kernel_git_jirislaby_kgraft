@@ -5,12 +5,12 @@
 
 extern void _mcount(void);
 
-struct dyn_arch_ftrace { };
+struct fentry_arch { };
 
 #define MCOUNT_ADDR ((long)_mcount)
 
 
-static inline unsigned long ftrace_call_adjust(unsigned long addr)
+static inline unsigned long fentry_call_adjust(unsigned long addr)
 {
 	return addr;
 }

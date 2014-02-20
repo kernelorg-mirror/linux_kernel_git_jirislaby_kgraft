@@ -9,12 +9,12 @@
 extern void _mcount(void);
 
 /* reloction of mcount call site is the same as the address */
-static inline unsigned long ftrace_call_adjust(unsigned long addr)
+static inline unsigned long fentry_call_adjust(unsigned long addr)
 {
 	return addr;
 }
 
-struct dyn_arch_ftrace {
+struct fentry_arch {
 };
 
 #endif /* __ASSEMBLY__ */

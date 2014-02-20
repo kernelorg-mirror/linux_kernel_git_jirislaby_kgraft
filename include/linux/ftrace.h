@@ -332,7 +332,7 @@ enum {
 struct dyn_ftrace {
 	unsigned long		ip; /* address of mcount call-site */
 	unsigned long		flags;
-	struct dyn_arch_ftrace	arch;
+	struct fentry_arch	arch;
 };
 
 int ftrace_force_update(void);

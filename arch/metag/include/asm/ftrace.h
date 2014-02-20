@@ -8,12 +8,12 @@
 extern void mcount_wrapper(void);
 #define MCOUNT_ADDR		((long)(mcount_wrapper))
 
-static inline unsigned long ftrace_call_adjust(unsigned long addr)
+static inline unsigned long fentry_call_adjust(unsigned long addr)
 {
 	return addr;
 }
 
-struct dyn_arch_ftrace {
+struct fentry_arch {
 	/* No extra data needed on metag */
 };
 #endif /* __ASSEMBLY__ */

@@ -47,7 +47,7 @@
 #ifndef __ASSEMBLY__
 extern atomic_t modifying_ftrace_code;
 
-static inline unsigned long ftrace_call_adjust(unsigned long addr)
+static inline unsigned long fentry_call_adjust(unsigned long addr)
 {
 	/*
 	 * addr is the address of the mcount call instruction.
@@ -58,7 +58,7 @@ static inline unsigned long ftrace_call_adjust(unsigned long addr)
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 
-struct dyn_arch_ftrace {
+struct fentry_arch {
 	/* No extra data needed for x86 */
 };
 
