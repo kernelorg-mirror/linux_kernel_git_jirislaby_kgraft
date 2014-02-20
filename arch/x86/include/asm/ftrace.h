@@ -37,8 +37,6 @@
 #endif
 
 #ifdef CONFIG_FUNCTION_TRACER
-#define MCOUNT_ADDR		((long)(fentry_hook))
-#define MCOUNT_INSN_SIZE	5 /* sizeof mcount call */
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 #define ARCH_SUPPORTS_FTRACE_OPS 1
@@ -47,20 +45,7 @@
 #ifndef __ASSEMBLY__
 extern atomic_t modifying_ftrace_code;
 
-static inline unsigned long fentry_call_adjust(unsigned long addr)
-{
-	/*
-	 * addr is the address of the mcount call instruction.
-	 * recordmcount does the necessary offset calculation.
-	 */
-	return addr;
-}
-
 #ifdef CONFIG_DYNAMIC_FTRACE
-
-struct fentry_arch {
-	/* No extra data needed for x86 */
-};
 
 int ftrace_int3_handler(struct pt_regs *regs);
 
