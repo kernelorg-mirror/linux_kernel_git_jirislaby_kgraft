@@ -15,7 +15,16 @@ struct fentry_arch {
 	struct module *mod;
 };
 
+struct fentry;
+
 extern void _mcount(void);
+extern int fentry_make_nop(struct module *mod, struct fentry *rec,
+		unsigned long addr);
+extern unsigned int fentry_call_replace(unsigned long ip, unsigned long addr,
+		int link);
+extern int fentry_modify_code(unsigned long ip, unsigned int old,
+		unsigned int new);
+extern int test_24bit_addr(unsigned long ip, unsigned long addr);
 
 static inline unsigned long fentry_call_adjust(unsigned long addr)
 {

@@ -389,7 +389,6 @@ ftrace_set_early_filter(struct ftrace_ops *ops, char *buf, int enable);
 
 /* defined in arch */
 extern int ftrace_ip_converted(unsigned long ip);
-extern int ftrace_dyn_arch_init(void);
 extern void ftrace_replace_code(int enable);
 extern int ftrace_update_ftrace_func(ftrace_func_t func);
 extern void ftrace_caller(void);
@@ -420,30 +419,6 @@ extern int ftrace_disable_ftrace_graph_caller(void);
 static inline int ftrace_enable_ftrace_graph_caller(void) { return 0; }
 static inline int ftrace_disable_ftrace_graph_caller(void) { return 0; }
 #endif
-
-/**
- * ftrace_make_nop - convert code into nop
- * @mod: module structure if called by module load initialization
- * @rec: the mcount call site record
- * @addr: the address that the call site should be calling
- *
- * This is a very sensitive operation and great care needs
- * to be taken by the arch.  The operation should carefully
- * read the location, check to see if what is read is indeed
- * what we expect it to be, and then on success of the compare,
- * it should write to the location.
- *
- * The code segment at @rec->ip should be a caller to @addr
- *
- * Return must be:
- *  0 on success
- *  -EFAULT on error reading the location
- *  -EINVAL on a failed compare of the contents
- *  -EPERM  on error writing to the location
- * Any other value will be considered a failure.
- */
-extern int ftrace_make_nop(struct module *mod,
-			   struct fentry *rec, unsigned long addr);
 
 /**
  * ftrace_make_call - convert a nop call site into a call to addr

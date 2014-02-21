@@ -1840,7 +1840,7 @@ __ftrace_replace_code(struct fentry *rec, int enable)
 		return ftrace_make_call(rec, ftrace_addr);
 
 	case FTRACE_UPDATE_MAKE_NOP:
-		return ftrace_make_nop(NULL, rec, ftrace_addr);
+		return fentry_make_nop(NULL, rec, ftrace_addr);
 
 	case FTRACE_UPDATE_MODIFY_CALL_REGS:
 	case FTRACE_UPDATE_MODIFY_CALL:
@@ -1957,7 +1957,7 @@ ftrace_code_disable(struct module *mod, struct fentry *rec)
 	if (unlikely(ftrace_disabled))
 		return 0;
 
-	ret = ftrace_make_nop(mod, rec, MCOUNT_ADDR);
+	ret = fentry_make_nop(mod, rec, MCOUNT_ADDR);
 	if (ret) {
 		ftrace_bug(ret, ip);
 		return 0;
@@ -2362,7 +2362,7 @@ static int ftrace_update_code(struct module *mod, struct ftrace_page *new_pgs)
 			 * If the tracing is enabled, go ahead and enable the record.
 			 *
 			 * The reason not to enable the record immediatelly is the
-			 * inherent check of ftrace_make_nop/ftrace_make_call for
+			 * inherent check of fentry_make_nop/ftrace_make_call for
 			 * correct previous instructions.  Making first the NOP
 			 * conversion puts the module to the correct state, thus
 			 * passing the ftrace_make_call check.
@@ -4380,7 +4380,7 @@ void __init ftrace_init(void)
 	int ret;
 
 	local_irq_save(flags);
-	ret = ftrace_dyn_arch_init();
+	ret = fentry_dyn_arch_init();
 	local_irq_restore(flags);
 	if (ret)
 		goto failed;

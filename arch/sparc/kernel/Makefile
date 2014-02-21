@@ -20,6 +20,9 @@ CFLAGS_REMOVE_time_$(BITS).o := -pg
 CFLAGS_REMOVE_perf_event.o := -pg
 CFLAGS_REMOVE_pcr.o := -pg
 endif
+ifdef CONFIG_FENTRY_RECORD_LIB
+CFLAGS_REMOVE_fentry.o = -pg
+endif
 
 obj-$(CONFIG_SPARC32)   += entry.o wof.o wuf.o
 obj-$(CONFIG_SPARC32)   += etrap_32.o
@@ -93,6 +96,8 @@ obj-$(CONFIG_KGDB)        += kgdb_$(BITS).o
 
 obj-$(CONFIG_DYNAMIC_FTRACE) += ftrace.o
 obj-$(CONFIG_FUNCTION_GRAPH_TRACER) += ftrace.o
+
+obj-$(CONFIG_FENTRY_RECORD_LIB) += fentry.o
 
 obj-$(CONFIG_EARLYFB) += btext.o
 obj-$(CONFIG_STACKTRACE)     += stacktrace.o

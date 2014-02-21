@@ -15,6 +15,9 @@ CFLAGS_REMOVE_kvmclock.o = -pg
 CFLAGS_REMOVE_ftrace.o = -pg
 CFLAGS_REMOVE_early_printk.o = -pg
 endif
+ifdef CONFIG_FENTRY_RECORD_LIB
+CFLAGS_REMOVE_fentry.o = -pg
+endif
 
 CFLAGS_irq.o := -I$(src)/../include/asm/trace
 
@@ -68,6 +71,7 @@ obj-$(CONFIG_FUNCTION_GRAPH_TRACER) += ftrace.o
 obj-$(CONFIG_FTRACE_SYSCALLS)	+= ftrace.o
 obj-$(CONFIG_X86_TSC)		+= trace_clock.o
 obj-$(CONFIG_KEXEC)		+= machine_kexec_$(BITS).o
+obj-$(CONFIG_FENTRY_RECORD_LIB)	+= fentry.o
 obj-$(CONFIG_KEXEC)		+= relocate_kernel_$(BITS).o crash.o
 obj-$(CONFIG_CRASH_DUMP)	+= crash_dump_$(BITS).o
 obj-y				+= kprobes/

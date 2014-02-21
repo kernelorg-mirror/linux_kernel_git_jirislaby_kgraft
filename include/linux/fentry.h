@@ -1,6 +1,8 @@
 #ifndef LINUX_FENTRY_H
 #define LINUX_FENTRY_H
 
+#include <linux/module.h>
+
 #include <asm/fentry.h>
 
 #ifdef CONFIG_FENTRY_RECORD_LIB
@@ -36,6 +38,32 @@ struct fentry {
 	unsigned long		flags;
 	struct fentry_arch	arch;
 };
+
+/**
+ * fentry_make_nop - convert code into nop
+ * @mod: module structure if called by module load initialization
+ * @rec: the fentry call site record
+ * @addr: the address that the call site should be calling
+ *
+ * This is a very sensitive operation and great care needs
+ * to be taken by the arch.  The operation should carefully
+ * read the location, check to see if what is read is indeed
+ * what we expect it to be, and then on success of the compare,
+ * it should write to the location.
+ *
+ * The code segment at @rec->ip should be a caller to @addr
+ *
+ * Return must be:
+ *  0 on success
+ *  -EFAULT on error reading the location
+ *  -EINVAL on a failed compare of the contents
+ *  -EPERM  on error writing to the location
+ * Any other value will be considered a failure.
+ */
+extern int fentry_make_nop(struct module *mod,
+			   struct fentry *rec, unsigned long addr);
+
+extern int fentry_dyn_arch_init(void);
 
 #endif /* CONFIG_FENTRY_RECORD_LIB */
 

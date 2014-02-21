@@ -25,6 +25,9 @@ CFLAGS_REMOVE_ftrace.o = -pg -mno-sched-epilog
 # timers used by tracing
 CFLAGS_REMOVE_time.o = -pg -mno-sched-epilog
 endif
+ifdef CONFIG_FENTRY_RECORD_LIB
+CFLAGS_REMOVE_fentry.o = -pg
+endif
 
 obj-y				:= cputable.o ptrace.o syscalls.o \
 				   irq.o align.o signal_32.o pmc.o vdso.o \
@@ -115,6 +118,7 @@ obj-$(CONFIG_PPC_IO_WORKAROUNDS)	+= io-workarounds.o
 obj-$(CONFIG_DYNAMIC_FTRACE)	+= ftrace.o
 obj-$(CONFIG_FUNCTION_GRAPH_TRACER)	+= ftrace.o
 obj-$(CONFIG_FTRACE_SYSCALLS)	+= ftrace.o
+obj-$(CONFIG_FENTRY_RECORD_LIB)	+= fentry.o
 
 ifneq ($(CONFIG_PPC_INDIRECT_PIO),y)
 obj-y				+= iomap.o

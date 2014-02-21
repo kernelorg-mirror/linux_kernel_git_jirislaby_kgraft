@@ -7,6 +7,9 @@ ifdef CONFIG_FUNCTION_TRACER
 CFLAGS_REMOVE_early.o = -pg
 CFLAGS_REMOVE_ftrace.o = -pg
 endif
+ifdef CONFIG_FENTRY_RECORD_LIB
+CFLAGS_REMOVE_fentry.o = -pg
+endif
 
 #
 # Passing null pointers is ok for smp code, since we access the lowcore here.
@@ -54,6 +57,7 @@ obj-$(CONFIG_STACKTRACE)	+= stacktrace.o
 obj-$(CONFIG_KPROBES)		+= kprobes.o
 obj-$(CONFIG_FUNCTION_TRACER)	+= $(if $(CONFIG_64BIT),mcount64.o,mcount.o)
 obj-$(CONFIG_DYNAMIC_FTRACE)	+= ftrace.o
+obj-$(CONFIG_FENTRY_RECORD_LIB)	+= fentry.o
 obj-$(CONFIG_FUNCTION_GRAPH_TRACER) += ftrace.o
 obj-$(CONFIG_FTRACE_SYSCALLS)  += ftrace.o
 obj-$(CONFIG_CRASH_DUMP)	+= crash_dump.o

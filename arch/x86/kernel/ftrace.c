@@ -57,33 +57,6 @@ static const unsigned char *ftrace_nop_replace(void)
 	return ideal_nops[NOP_ATOMIC5];
 }
 
-int ftrace_make_nop(struct module *mod,
-		    struct fentry *rec, unsigned long addr)
-{
-	union insn_call_jmp_union insn;
-	unsigned const char *new;
-	unsigned long ip = rec->ip;
-
-	insn_call_jmp(&insn, true, ip, addr);
-	new = ftrace_nop_replace();
-
-	/*
-	 * On boot up, and when modules are loaded, the MCOUNT_ADDR
-	 * is converted to a nop, and will never become MCOUNT_ADDR
-	 * again. This code is either running before SMP (on boot up)
-	 * or before the code will ever be executed (module load).
-	 * We do not want to use the breakpoint version in this case,
-	 * just modify the code directly.
-	 */
-	if (addr == MCOUNT_ADDR)
-		return text_poke_direct(rec->ip, insn.code, new,
-				MCOUNT_INSN_SIZE);
-
-	/* Normal cases use add_brk_on_nop */
-	WARN_ONCE(1, "invalid use of ftrace_make_nop");
-	return -EINVAL;
-}
-
 int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	union insn_call_jmp_union insn;
@@ -606,11 +579,6 @@ void arch_ftrace_update_code(int command)
 	ftrace_modify_all_code(command);
 
 	atomic_dec(&modifying_ftrace_code);
-}
-
-int __init ftrace_dyn_arch_init(void)
-{
-	return 0;
 }
 #endif
 
