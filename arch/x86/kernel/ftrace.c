@@ -26,6 +26,7 @@
 #include <asm/cacheflush.h>
 #include <asm/kprobes.h>
 #include <asm/ftrace.h>
+#include <asm/insn.h>
 #include <asm/nops.h>
 
 #ifdef CONFIG_DYNAMIC_FTRACE
@@ -42,28 +43,6 @@ int ftrace_arch_code_modify_post_process(void)
 	set_all_modules_text_ro();
 	set_kernel_text_ro();
 	return 0;
-}
-
-#define INSN_CALL_JMP_LEN	5
-
-union insn_call_jmp_union {
-	char code[INSN_CALL_JMP_LEN];
-	struct {
-		char e8;
-		int offset;
-	} __attribute__((packed));
-};
-
-static int insn_call_jmp_offset(long ip, long addr)
-{
-	return (int)(addr - ip);
-}
-
-static void insn_call_jmp(union insn_call_jmp_union *insn, bool call,
-		unsigned long ip, unsigned long addr)
-{
-	insn->e8 = call ? 0xe8 : 0xe9;
-	insn->offset = insn_call_jmp_offset(ip + INSN_CALL_JMP_LEN, addr);
 }
 
 static inline int

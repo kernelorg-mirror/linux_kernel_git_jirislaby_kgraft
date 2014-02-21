@@ -22,6 +22,7 @@
 
 /* insn_attr_t is defined in inat.h */
 #include <asm/inat.h>
+#include <linux/types.h>
 
 struct insn_field {
 	union {
@@ -194,6 +195,28 @@ static inline int insn_offset_displacement(struct insn *insn)
 static inline int insn_offset_immediate(struct insn *insn)
 {
 	return insn_offset_displacement(insn) + insn->displacement.nbytes;
+}
+
+#define INSN_CALL_JMP_LEN	5
+
+union insn_call_jmp_union {
+	char code[INSN_CALL_JMP_LEN];
+	struct {
+		char e8;
+		int offset;
+	} __attribute__((packed));
+};
+
+static inline int insn_call_jmp_offset(long ip, long addr)
+{
+	return (int)(addr - ip);
+}
+
+static inline void insn_call_jmp(union insn_call_jmp_union *insn, bool call,
+		unsigned long ip, unsigned long addr)
+{
+	insn->e8 = call ? 0xe8 : 0xe9;
+	insn->offset = insn_call_jmp_offset(ip + INSN_CALL_JMP_LEN, addr);
 }
 
 #endif /* _ASM_X86_INSN_H */
