@@ -1159,21 +1159,13 @@ static struct ftrace_ops global_ops = {
 	INIT_REGEX_LOCK(global_ops)
 };
 
-struct ftrace_page {
-	struct ftrace_page	*next;
-	struct fentry		*records;
-	int			index;
-	int			size;
-};
-
 #define ENTRY_SIZE sizeof(struct fentry)
 #define ENTRIES_PER_PAGE (PAGE_SIZE / ENTRY_SIZE)
 
 /* estimate from running different kernels */
 #define NR_TO_INIT		10000
 
-static struct ftrace_page	*ftrace_pages_start;
-static struct ftrace_page	*ftrace_pages;
+static struct fentry_page	*ftrace_pages;
 
 static bool ftrace_hash_empty(struct ftrace_hash *hash)
 {
@@ -1483,7 +1475,7 @@ ftrace_ops_test(struct ftrace_ops *ops, unsigned long ip, void *regs)
  * you must use a goto.
  */
 #define do_for_each_ftrace_rec(pg, rec)					\
-	for (pg = ftrace_pages_start; pg; pg = pg->next) {		\
+	for (pg = fentry_pages_start; pg; pg = pg->next) {		\
 		int _____i;						\
 		for (_____i = 0; _____i < pg->index; _____i++) {	\
 			rec = &pg->records[_____i];
@@ -1507,14 +1499,14 @@ static int ftrace_cmp_recs(const void *a, const void *b)
 
 static unsigned long ftrace_location_range(unsigned long start, unsigned long end)
 {
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	struct fentry *rec;
 	struct fentry key;
 
 	key.ip = start;
 	key.flags = end;	/* overload flags, as it is unsigned long */
 
-	for (pg = ftrace_pages_start; pg; pg = pg->next) {
+	for (pg = fentry_pages_start; pg; pg = pg->next) {
 		if (end < pg->records[0].ip ||
 		    start >= (pg->records[pg->index - 1].ip + MCOUNT_INSN_SIZE))
 			continue;
@@ -1568,7 +1560,7 @@ static void __ftrace_hash_rec_update(struct ftrace_ops *ops,
 {
 	struct ftrace_hash *hash;
 	struct ftrace_hash *other_hash;
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	struct fentry *rec;
 	int count = 0;
 	int all = 0;
@@ -1858,7 +1850,7 @@ __ftrace_replace_code(struct fentry *rec, int enable)
 void __weak ftrace_replace_code(int enable)
 {
 	struct fentry *rec;
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	int failed;
 
 	if (unlikely(ftrace_disabled))
@@ -1875,7 +1867,7 @@ void __weak ftrace_replace_code(int enable)
 }
 
 struct ftrace_rec_iter {
-	struct ftrace_page	*pg;
+	struct fentry_page	*pg;
 	int			index;
 };
 
@@ -1897,7 +1889,7 @@ struct ftrace_rec_iter *ftrace_rec_iter_start(void)
 	static struct ftrace_rec_iter ftrace_rec_iter;
 	struct ftrace_rec_iter *iter = &ftrace_rec_iter;
 
-	iter->pg = ftrace_pages_start;
+	iter->pg = fentry_pages_start;
 	iter->index = 0;
 
 	/* Could have empty pages */
@@ -2303,9 +2295,9 @@ static int referenced_filters(struct fentry *rec)
 	return cnt;
 }
 
-static int ftrace_update_code(struct module *mod, struct ftrace_page *new_pgs)
+static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 {
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	struct fentry *p;
 	cycle_t start, stop;
 	unsigned long update_cnt = 0;
@@ -2382,7 +2374,7 @@ static int ftrace_update_code(struct module *mod, struct ftrace_page *new_pgs)
 	return 0;
 }
 
-static int ftrace_allocate_records(struct ftrace_page *pg, int count)
+static int ftrace_allocate_records(struct fentry_page *pg, int count)
 {
 	int order;
 	int cnt;
@@ -2419,11 +2411,11 @@ static int ftrace_allocate_records(struct ftrace_page *pg, int count)
 	return cnt;
 }
 
-static struct ftrace_page *
+static struct fentry_page *
 ftrace_allocate_pages(unsigned long num_to_init)
 {
-	struct ftrace_page *start_pg;
-	struct ftrace_page *pg;
+	struct fentry_page *start_pg;
+	struct fentry_page *pg;
 	int order;
 	int cnt;
 
@@ -2474,7 +2466,7 @@ ftrace_allocate_pages(unsigned long num_to_init)
 struct ftrace_iterator {
 	loff_t				pos;
 	loff_t				func_pos;
-	struct ftrace_page		*pg;
+	struct fentry_page		*pg;
 	struct fentry		*func;
 	struct ftrace_func_probe	*probe;
 	struct trace_parser		parser;
@@ -2669,11 +2661,11 @@ static void *t_start(struct seq_file *m, loff_t *pos)
 		return t_hash_start(m, pos);
 
 	/*
-	 * Unfortunately, we need to restart at ftrace_pages_start
+	 * Unfortunately, we need to restart at fentry_pages_start
 	 * every time we let go of the ftrace_mutex. This is because
 	 * those pointers can change without the lock.
 	 */
-	iter->pg = ftrace_pages_start;
+	iter->pg = fentry_pages_start;
 	iter->idx = 0;
 	for (l = 0; l <= *pos; ) {
 		p = t_next(m, p, &l);
@@ -2737,7 +2729,7 @@ ftrace_avail_open(struct inode *inode, struct file *file)
 
 	iter = __seq_open_private(file, &show_ftrace_seq_ops, sizeof(*iter));
 	if (iter) {
-		iter->pg = ftrace_pages_start;
+		iter->pg = fentry_pages_start;
 		iter->ops = &global_ops;
 	}
 
@@ -2754,7 +2746,7 @@ ftrace_enabled_open(struct inode *inode, struct file *file)
 
 	iter = __seq_open_private(file, &show_ftrace_seq_ops, sizeof(*iter));
 	if (iter) {
-		iter->pg = ftrace_pages_start;
+		iter->pg = fentry_pages_start;
 		iter->flags = FTRACE_ITER_ENABLED;
 		iter->ops = &global_ops;
 	}
@@ -2832,7 +2824,7 @@ ftrace_regex_open(struct ftrace_ops *ops, int flag,
 		ftrace_filter_reset(iter->hash);
 
 	if (file->f_mode & FMODE_READ) {
-		iter->pg = ftrace_pages_start;
+		iter->pg = fentry_pages_start;
 
 		ret = seq_open(file, &show_ftrace_seq_ops);
 		if (!ret) {
@@ -2950,7 +2942,7 @@ match_records(struct ftrace_hash *hash, char *buff,
 	      int len, char *mod, int not)
 {
 	unsigned search_len = 0;
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	struct fentry *rec;
 	int type = MATCH_FULL;
 	char *search = buff;
@@ -3151,7 +3143,7 @@ register_ftrace_function_probe(char *glob, struct ftrace_probe_ops *ops,
 	struct ftrace_func_probe *entry;
 	struct ftrace_hash **orig_hash = &trace_probe_ops.filter_hash;
 	struct ftrace_hash *hash;
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	struct fentry *rec;
 	int type, len, not;
 	unsigned long key;
@@ -3986,7 +3978,7 @@ static int
 ftrace_set_func(unsigned long *array, int *idx, int size, char *buffer)
 {
 	struct fentry *rec;
-	struct ftrace_page *pg;
+	struct fentry_page *pg;
 	int search_len;
 	int fail = 1;
 	int type, not;
@@ -4178,8 +4170,8 @@ static int ftrace_process_locs(struct module *mod,
 			       unsigned long *start,
 			       unsigned long *end)
 {
-	struct ftrace_page *start_pg;
-	struct ftrace_page *pg;
+	struct fentry_page *start_pg;
+	struct fentry_page *pg;
 	struct fentry *rec;
 	unsigned long count;
 	unsigned long *p;
@@ -4207,9 +4199,9 @@ static int ftrace_process_locs(struct module *mod,
 	 * Force a new page to be allocated for modules.
 	 */
 	if (!mod) {
-		WARN_ON(ftrace_pages || ftrace_pages_start);
+		WARN_ON(ftrace_pages || fentry_pages_start);
 		/* First initialization */
-		ftrace_pages = ftrace_pages_start = start_pg;
+		ftrace_pages = fentry_pages_start = start_pg;
 	} else {
 		if (!ftrace_pages)
 			goto out;
@@ -4275,13 +4267,13 @@ static int ftrace_process_locs(struct module *mod,
 
 #ifdef CONFIG_MODULES
 
-#define next_to_ftrace_page(p) container_of(p, struct ftrace_page, next)
+#define next_to_ftrace_page(p) container_of(p, struct fentry_page, next)
 
 void ftrace_release_mod(struct module *mod)
 {
 	struct fentry *rec;
-	struct ftrace_page **last_pg;
-	struct ftrace_page *pg;
+	struct fentry_page **last_pg;
+	struct fentry_page *pg;
 	int order;
 
 	mutex_lock(&ftrace_lock);
@@ -4293,15 +4285,15 @@ void ftrace_release_mod(struct module *mod)
 	 * Each module has its own ftrace_pages, remove
 	 * them from the list.
 	 */
-	last_pg = &ftrace_pages_start;
-	for (pg = ftrace_pages_start; pg; pg = *last_pg) {
+	last_pg = &fentry_pages_start;
+	for (pg = fentry_pages_start; pg; pg = *last_pg) {
 		rec = &pg->records[0];
 		if (within_module_core(rec->ip, mod)) {
 			/*
 			 * As core pages are first, the first
 			 * page should never be a module page.
 			 */
-			if (WARN_ON(pg == ftrace_pages_start))
+			if (WARN_ON(pg == fentry_pages_start))
 				goto out_unlock;
 
 			/* Check if we are deleting the last page */

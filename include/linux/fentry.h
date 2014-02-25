@@ -39,6 +39,15 @@ struct fentry {
 	struct fentry_arch	arch;
 };
 
+struct fentry_page {
+	struct fentry_page	*next;
+	struct fentry		*records;
+	int			index;
+	int			size;
+};
+
+extern struct fentry_page *fentry_pages_start;
+
 /**
  * fentry_make_nop - convert code into nop
  * @mod: module structure if called by module load initialization
