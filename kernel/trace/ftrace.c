@@ -20,6 +20,7 @@
 #include <linux/suspend.h>
 #include <linux/debugfs.h>
 #include <linux/hardirq.h>
+#include <linux/hrtimer.h>
 #include <linux/kthread.h>
 #include <linux/uaccess.h>
 #include <linux/bsearch.h>
@@ -2239,7 +2240,7 @@ static void ftrace_shutdown_sysctl(void)
 		ftrace_run_update_code(FTRACE_DISABLE_CALLS);
 }
 
-static cycle_t		ftrace_update_time;
+static ktime_t		ftrace_update_time;
 unsigned long		ftrace_update_tot_cnt;
 
 static inline int ops_traces_mod(struct ftrace_ops *ops)
@@ -2299,7 +2300,7 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 {
 	struct fentry_page *pg;
 	struct fentry *p;
-	cycle_t start, stop;
+	ktime_t start;
 	unsigned long update_cnt = 0;
 	unsigned long ref = 0;
 	bool test = false;
@@ -2325,7 +2326,7 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 		}
 	}
 
-	start = ftrace_now(raw_smp_processor_id());
+	start = ktime_get();
 
 	for (pg = new_pgs; pg; pg = pg->next) {
 
@@ -2367,8 +2368,7 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 		}
 	}
 
-	stop = ftrace_now(raw_smp_processor_id());
-	ftrace_update_time = stop - start;
+	ftrace_update_time = ktime_sub(ktime_get(), start);
 	ftrace_update_tot_cnt += update_cnt;
 
 	return 0;
