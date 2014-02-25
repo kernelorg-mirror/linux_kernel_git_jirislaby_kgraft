@@ -15,6 +15,7 @@
  */
 
 #include <linux/ftrace.h>
+#include <linux/fentry.h>
 #include <linux/uaccess.h>
 
 #include <asm/cacheflush.h>
@@ -93,7 +94,7 @@ static unsigned long ftrace_gen_branch(unsigned long pc, unsigned long addr,
 	return opcode_x1 | opcode_x0;
 }
 
-static unsigned long ftrace_nop_replace(struct dyn_ftrace *rec)
+static unsigned long ftrace_nop_replace(struct fentry *rec)
 {
 	return NOP();
 }
@@ -141,7 +142,7 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	return ret;
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned long new, old;
 	unsigned long ip = rec->ip;
@@ -153,7 +154,7 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 }
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	unsigned long old;

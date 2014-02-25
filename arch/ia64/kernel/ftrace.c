@@ -11,6 +11,7 @@
  * enabled. All code mutation routines here take effect atomically.
  */
 
+#include <linux/fentry.h>
 #include <linux/uaccess.h>
 #include <linux/ftrace.h>
 
@@ -126,7 +127,7 @@ skip_check:
 	return 0;
 }
 
-static int ftrace_make_nop_check(struct dyn_ftrace *rec, unsigned long addr)
+static int ftrace_make_nop_check(struct fentry *rec, unsigned long addr)
 {
 	unsigned char __attribute__((aligned(8))) replaced[MCOUNT_INSN_SIZE];
 	unsigned long ip = rec->ip;
@@ -159,7 +160,7 @@ static int ftrace_make_nop_check(struct dyn_ftrace *rec, unsigned long addr)
 }
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	int ret;
 	char *new;
@@ -171,7 +172,7 @@ int ftrace_make_nop(struct module *mod,
 	return ftrace_modify_code(rec->ip, NULL, new, 0);
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	unsigned char *old, *new;

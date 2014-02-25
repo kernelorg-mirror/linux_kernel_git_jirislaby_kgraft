@@ -13,6 +13,7 @@
  */
 
 #include <linux/ftrace.h>
+#include <linux/fentry.h>
 #include <linux/uaccess.h>
 
 #include <asm/cacheflush.h>
@@ -34,12 +35,12 @@
 
 #define	OLD_NOP		0xe1a00000	/* mov r0, r0 */
 
-static unsigned long ftrace_nop_replace(struct dyn_ftrace *rec)
+static unsigned long ftrace_nop_replace(struct fentry *rec)
 {
 	return rec->arch.old_mcount ? OLD_NOP : NOP;
 }
 
-static unsigned long adjust_address(struct dyn_ftrace *rec, unsigned long addr)
+static unsigned long adjust_address(struct fentry *rec, unsigned long addr)
 {
 	if (!rec->arch.old_mcount)
 		return addr;
@@ -52,12 +53,12 @@ static unsigned long adjust_address(struct dyn_ftrace *rec, unsigned long addr)
 	return addr;
 }
 #else
-static unsigned long ftrace_nop_replace(struct dyn_ftrace *rec)
+static unsigned long ftrace_nop_replace(struct fentry *rec)
 {
 	return NOP;
 }
 
-static unsigned long adjust_address(struct dyn_ftrace *rec, unsigned long addr)
+static unsigned long adjust_address(struct fentry *rec, unsigned long addr)
 {
 	return addr;
 }
@@ -120,7 +121,7 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	return ret;
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned long new, old;
 	unsigned long ip = rec->ip;
@@ -132,7 +133,7 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 }
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	unsigned long old;

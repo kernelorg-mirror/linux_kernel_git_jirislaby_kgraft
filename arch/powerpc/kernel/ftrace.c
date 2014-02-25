@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 #include <linux/hardirq.h>
 #include <linux/uaccess.h>
+#include <linux/fentry.h>
 #include <linux/module.h>
 #include <linux/ftrace.h>
 #include <linux/percpu.h>
@@ -102,7 +103,7 @@ static unsigned long find_bl_target(unsigned long ip, unsigned int op)
 #ifdef CONFIG_PPC64
 static int
 __ftrace_make_nop(struct module *mod,
-		  struct dyn_ftrace *rec, unsigned long addr)
+		  struct fentry *rec, unsigned long addr)
 {
 	unsigned int op;
 	unsigned int jmp[5];
@@ -224,7 +225,7 @@ __ftrace_make_nop(struct module *mod,
 #else /* !PPC64 */
 static int
 __ftrace_make_nop(struct module *mod,
-		  struct dyn_ftrace *rec, unsigned long addr)
+		  struct fentry *rec, unsigned long addr)
 {
 	unsigned int op;
 	unsigned int jmp[4];
@@ -295,7 +296,7 @@ __ftrace_make_nop(struct module *mod,
 #endif /* CONFIG_MODULES */
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	unsigned int old, new;
@@ -346,7 +347,7 @@ int ftrace_make_nop(struct module *mod,
 #ifdef CONFIG_MODULES
 #ifdef CONFIG_PPC64
 static int
-__ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+__ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned int op[2];
 	unsigned long ip = rec->ip;
@@ -393,7 +394,7 @@ __ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 }
 #else
 static int
-__ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+__ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned int op;
 	unsigned long ip = rec->ip;
@@ -432,7 +433,7 @@ __ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 #endif /* CONFIG_PPC64 */
 #endif /* CONFIG_MODULES */
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	unsigned int old, new;
@@ -480,7 +481,7 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	return ret;
 }
 
-static int __ftrace_replace_code(struct dyn_ftrace *rec, int enable)
+static int __ftrace_replace_code(struct fentry *rec, int enable)
 {
 	unsigned long ftrace_addr = (unsigned long)FTRACE_ADDR;
 	int ret;
@@ -502,7 +503,7 @@ static int __ftrace_replace_code(struct dyn_ftrace *rec, int enable)
 void ftrace_replace_code(int enable)
 {
 	struct ftrace_rec_iter *iter;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	int ret;
 
 	for (iter = ftrace_rec_iter_start(); iter;

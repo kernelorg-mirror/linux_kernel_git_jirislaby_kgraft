@@ -10,6 +10,7 @@
 #include <linux/kallsyms.h>
 #include <linux/linkage.h>
 #include <linux/bitops.h>
+#include <linux/fentry.h>
 #include <linux/ptrace.h>
 #include <linux/ktime.h>
 #include <linux/sched.h>
@@ -303,38 +304,6 @@ extern int ftrace_text_reserved(const void *start, const void *end);
 
 extern int ftrace_nr_registered_ops(void);
 
-/*
- * The dyn_ftrace record's flags field is split into two parts.
- * the first part which is '0-FTRACE_REF_MAX' is a counter of
- * the number of callbacks that have registered the function that
- * the dyn_ftrace descriptor represents.
- *
- * The second part is a mask:
- *  ENABLED - the function is being traced
- *  REGS    - the record wants the function to save regs
- *  REGS_EN - the function is set up to save regs.
- *
- * When a new ftrace_ops is registered and wants a function to save
- * pt_regs, the rec->flag REGS is set. When the function has been
- * set up to save regs, the REG_EN flag is set. Once a function
- * starts saving regs it will do so until all ftrace_ops are removed
- * from tracing that function.
- */
-enum {
-	FTRACE_FL_ENABLED	= (1UL << 29),
-	FTRACE_FL_REGS		= (1UL << 30),
-	FTRACE_FL_REGS_EN	= (1UL << 31)
-};
-
-#define FTRACE_FL_MASK		(0x7UL << 29)
-#define FTRACE_REF_MAX		((1UL << 29) - 1)
-
-struct dyn_ftrace {
-	unsigned long		ip; /* address of mcount call-site */
-	unsigned long		flags;
-	struct fentry_arch	arch;
-};
-
 int ftrace_force_update(void);
 int ftrace_set_filter_ip(struct ftrace_ops *ops, unsigned long ip,
 			 int remove, int reset);
@@ -392,7 +361,7 @@ struct ftrace_rec_iter;
 
 struct ftrace_rec_iter *ftrace_rec_iter_start(void);
 struct ftrace_rec_iter *ftrace_rec_iter_next(struct ftrace_rec_iter *iter);
-struct dyn_ftrace *ftrace_rec_iter_record(struct ftrace_rec_iter *iter);
+struct fentry *ftrace_rec_iter_record(struct ftrace_rec_iter *iter);
 
 #define for_ftrace_rec_iter(iter)		\
 	for (iter = ftrace_rec_iter_start();	\
@@ -400,8 +369,8 @@ struct dyn_ftrace *ftrace_rec_iter_record(struct ftrace_rec_iter *iter);
 	     iter = ftrace_rec_iter_next(iter))
 
 
-int ftrace_update_record(struct dyn_ftrace *rec, int enable);
-int ftrace_test_record(struct dyn_ftrace *rec, int enable);
+int ftrace_update_record(struct fentry *rec, int enable);
+int ftrace_test_record(struct fentry *rec, int enable);
 void ftrace_run_stop_machine(int command);
 unsigned long ftrace_location(unsigned long ip);
 
@@ -474,7 +443,7 @@ static inline int ftrace_disable_ftrace_graph_caller(void) { return 0; }
  * Any other value will be considered a failure.
  */
 extern int ftrace_make_nop(struct module *mod,
-			   struct dyn_ftrace *rec, unsigned long addr);
+			   struct fentry *rec, unsigned long addr);
 
 /**
  * ftrace_make_call - convert a nop call site into a call to addr
@@ -496,7 +465,7 @@ extern int ftrace_make_nop(struct module *mod,
  *  -EPERM  on error writing to the location
  * Any other value will be considered a failure.
  */
-extern int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr);
+extern int ftrace_make_call(struct fentry *rec, unsigned long addr);
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
 /**
@@ -520,11 +489,11 @@ extern int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr);
  *  -EPERM  on error writing to the location
  * Any other value will be considered a failure.
  */
-extern int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
+extern int ftrace_modify_call(struct fentry *rec, unsigned long old_addr,
 			      unsigned long addr);
 #else
 /* Should never be called */
-static inline int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
+static inline int ftrace_modify_call(struct fentry *rec, unsigned long old_addr,
 				     unsigned long addr)
 {
 	return -EINVAL;

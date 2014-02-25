@@ -1,6 +1,7 @@
 #include <linux/spinlock.h>
 #include <linux/hardirq.h>
 #include <linux/ftrace.h>
+#include <linux/fentry.h>
 #include <linux/percpu.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -52,7 +53,7 @@ static int ftrace_modify_code(unsigned long ip, u32 old, u32 new)
 	return faulted;
 }
 
-int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_nop(struct module *mod, struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	u32 old, new;
@@ -62,7 +63,7 @@ int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec, unsigned long ad
 	return ftrace_modify_code(ip, old, new);
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned long ip = rec->ip;
 	u32 old, new;

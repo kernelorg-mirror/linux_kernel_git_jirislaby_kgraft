@@ -23,6 +23,7 @@
 #include <linux/kthread.h>
 #include <linux/uaccess.h>
 #include <linux/bsearch.h>
+#include <linux/fentry.h>
 #include <linux/module.h>
 #include <linux/ftrace.h>
 #include <linux/sysctl.h>
@@ -1160,12 +1161,12 @@ static struct ftrace_ops global_ops = {
 
 struct ftrace_page {
 	struct ftrace_page	*next;
-	struct dyn_ftrace	*records;
+	struct fentry		*records;
 	int			index;
 	int			size;
 };
 
-#define ENTRY_SIZE sizeof(struct dyn_ftrace)
+#define ENTRY_SIZE sizeof(struct fentry)
 #define ENTRIES_PER_PAGE (PAGE_SIZE / ENTRY_SIZE)
 
 /* estimate from running different kernels */
@@ -1494,8 +1495,8 @@ ftrace_ops_test(struct ftrace_ops *ops, unsigned long ip, void *regs)
 
 static int ftrace_cmp_recs(const void *a, const void *b)
 {
-	const struct dyn_ftrace *key = a;
-	const struct dyn_ftrace *rec = b;
+	const struct fentry *key = a;
+	const struct fentry *rec = b;
 
 	if (key->flags < rec->ip)
 		return -1;
@@ -1507,8 +1508,8 @@ static int ftrace_cmp_recs(const void *a, const void *b)
 static unsigned long ftrace_location_range(unsigned long start, unsigned long end)
 {
 	struct ftrace_page *pg;
-	struct dyn_ftrace *rec;
-	struct dyn_ftrace key;
+	struct fentry *rec;
+	struct fentry key;
 
 	key.ip = start;
 	key.flags = end;	/* overload flags, as it is unsigned long */
@@ -1518,7 +1519,7 @@ static unsigned long ftrace_location_range(unsigned long start, unsigned long en
 		    start >= (pg->records[pg->index - 1].ip + MCOUNT_INSN_SIZE))
 			continue;
 		rec = bsearch(&key, pg->records, pg->index,
-			      sizeof(struct dyn_ftrace),
+			      sizeof(struct fentry),
 			      ftrace_cmp_recs);
 		if (rec)
 			return rec->ip;
@@ -1568,7 +1569,7 @@ static void __ftrace_hash_rec_update(struct ftrace_ops *ops,
 	struct ftrace_hash *hash;
 	struct ftrace_hash *other_hash;
 	struct ftrace_page *pg;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	int count = 0;
 	int all = 0;
 
@@ -1634,16 +1635,16 @@ static void __ftrace_hash_rec_update(struct ftrace_ops *ops,
 
 		if (inc) {
 			rec->flags++;
-			if (FTRACE_WARN_ON((rec->flags & ~FTRACE_FL_MASK) == FTRACE_REF_MAX))
+			if (FTRACE_WARN_ON((rec->flags & ~FENTRY_FL_MASK) == FENTRY_REF_MAX))
 				return;
 			/*
 			 * If any ops wants regs saved for this function
 			 * then all ops will get saved regs.
 			 */
 			if (ops->flags & FTRACE_OPS_FL_SAVE_REGS)
-				rec->flags |= FTRACE_FL_REGS;
+				rec->flags |= FENTRY_FL_REGS;
 		} else {
-			if (FTRACE_WARN_ON((rec->flags & ~FTRACE_FL_MASK) == 0))
+			if (FTRACE_WARN_ON((rec->flags & ~FENTRY_FL_MASK) == 0))
 				return;
 			rec->flags--;
 		}
@@ -1715,7 +1716,7 @@ void ftrace_bug(int failed, unsigned long ip)
 	}
 }
 
-static int ftrace_check_record(struct dyn_ftrace *rec, int enable, int update)
+static int ftrace_check_record(struct fentry *rec, int enable, int update)
 {
 	unsigned long flag = 0UL;
 
@@ -1730,8 +1731,8 @@ static int ftrace_check_record(struct dyn_ftrace *rec, int enable, int update)
 	 * If we are disabling calls, then disable all records that
 	 * are enabled.
 	 */
-	if (enable && (rec->flags & ~FTRACE_FL_MASK))
-		flag = FTRACE_FL_ENABLED;
+	if (enable && (rec->flags & ~FENTRY_FL_MASK))
+		flag = FENTRY_FL_ENABLED;
 
 	/*
 	 * If enabling and the REGS flag does not match the REGS_EN, then
@@ -1739,24 +1740,24 @@ static int ftrace_check_record(struct dyn_ftrace *rec, int enable, int update)
 	 * ENABLED.
 	 */
 	if (flag &&
-	    (!(rec->flags & FTRACE_FL_REGS) != !(rec->flags & FTRACE_FL_REGS_EN)))
-		flag |= FTRACE_FL_REGS;
+	    (!(rec->flags & FENTRY_FL_REGS) != !(rec->flags & FENTRY_FL_REGS_EN)))
+		flag |= FENTRY_FL_REGS;
 
 	/* If the state of this record hasn't changed, then do nothing */
-	if ((rec->flags & FTRACE_FL_ENABLED) == flag)
+	if ((rec->flags & FENTRY_FL_ENABLED) == flag)
 		return FTRACE_UPDATE_IGNORE;
 
 	if (flag) {
 		/* Save off if rec is being enabled (for return value) */
-		flag ^= rec->flags & FTRACE_FL_ENABLED;
+		flag ^= rec->flags & FENTRY_FL_ENABLED;
 
 		if (update) {
-			rec->flags |= FTRACE_FL_ENABLED;
-			if (flag & FTRACE_FL_REGS) {
-				if (rec->flags & FTRACE_FL_REGS)
-					rec->flags |= FTRACE_FL_REGS_EN;
+			rec->flags |= FENTRY_FL_ENABLED;
+			if (flag & FENTRY_FL_REGS) {
+				if (rec->flags & FENTRY_FL_REGS)
+					rec->flags |= FENTRY_FL_REGS_EN;
 				else
-					rec->flags &= ~FTRACE_FL_REGS_EN;
+					rec->flags &= ~FENTRY_FL_REGS_EN;
 			}
 		}
 
@@ -1770,9 +1771,9 @@ static int ftrace_check_record(struct dyn_ftrace *rec, int enable, int update)
 		 *   return UPDATE_MODIFY_CALL to tell the caller to convert
 		 *   from the save regs, to a non-save regs function.
 		 */
-		if (flag & FTRACE_FL_ENABLED)
+		if (flag & FENTRY_FL_ENABLED)
 			return FTRACE_UPDATE_MAKE_CALL;
-		else if (rec->flags & FTRACE_FL_REGS_EN)
+		else if (rec->flags & FENTRY_FL_REGS_EN)
 			return FTRACE_UPDATE_MODIFY_CALL_REGS;
 		else
 			return FTRACE_UPDATE_MODIFY_CALL;
@@ -1780,11 +1781,11 @@ static int ftrace_check_record(struct dyn_ftrace *rec, int enable, int update)
 
 	if (update) {
 		/* If there's no more users, clear all flags */
-		if (!(rec->flags & ~FTRACE_FL_MASK))
+		if (!(rec->flags & ~FENTRY_FL_MASK))
 			rec->flags = 0;
 		else
 			/* Just disable the record (keep REGS state) */
-			rec->flags &= ~FTRACE_FL_ENABLED;
+			rec->flags &= ~FENTRY_FL_ENABLED;
 	}
 
 	return FTRACE_UPDATE_MAKE_NOP;
@@ -1798,7 +1799,7 @@ static int ftrace_check_record(struct dyn_ftrace *rec, int enable, int update)
  * The records that represent all functions that can be traced need
  * to be updated when tracing has been enabled.
  */
-int ftrace_update_record(struct dyn_ftrace *rec, int enable)
+int ftrace_update_record(struct fentry *rec, int enable)
 {
 	return ftrace_check_record(rec, enable, 1);
 }
@@ -1812,13 +1813,13 @@ int ftrace_update_record(struct dyn_ftrace *rec, int enable)
  * tracing to determine how to modify the function code that it
  * represents.
  */
-int ftrace_test_record(struct dyn_ftrace *rec, int enable)
+int ftrace_test_record(struct fentry *rec, int enable)
 {
 	return ftrace_check_record(rec, enable, 0);
 }
 
 static int
-__ftrace_replace_code(struct dyn_ftrace *rec, int enable)
+__ftrace_replace_code(struct fentry *rec, int enable)
 {
 	unsigned long ftrace_old_addr;
 	unsigned long ftrace_addr;
@@ -1826,7 +1827,7 @@ __ftrace_replace_code(struct dyn_ftrace *rec, int enable)
 
 	ret = ftrace_update_record(rec, enable);
 
-	if (rec->flags & FTRACE_FL_REGS)
+	if (rec->flags & FENTRY_FL_REGS)
 		ftrace_addr = (unsigned long)FTRACE_REGS_ADDR;
 	else
 		ftrace_addr = (unsigned long)FTRACE_ADDR;
@@ -1843,7 +1844,7 @@ __ftrace_replace_code(struct dyn_ftrace *rec, int enable)
 
 	case FTRACE_UPDATE_MODIFY_CALL_REGS:
 	case FTRACE_UPDATE_MODIFY_CALL:
-		if (rec->flags & FTRACE_FL_REGS)
+		if (rec->flags & FENTRY_FL_REGS)
 			ftrace_old_addr = (unsigned long)FTRACE_ADDR;
 		else
 			ftrace_old_addr = (unsigned long)FTRACE_REGS_ADDR;
@@ -1856,7 +1857,7 @@ __ftrace_replace_code(struct dyn_ftrace *rec, int enable)
 
 void __weak ftrace_replace_code(int enable)
 {
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	struct ftrace_page *pg;
 	int failed;
 
@@ -1940,13 +1941,13 @@ struct ftrace_rec_iter *ftrace_rec_iter_next(struct ftrace_rec_iter *iter)
  *
  * Returns the record that the current @iter is at.
  */
-struct dyn_ftrace *ftrace_rec_iter_record(struct ftrace_rec_iter *iter)
+struct fentry *ftrace_rec_iter_record(struct ftrace_rec_iter *iter)
 {
 	return &iter->pg->records[iter->index];
 }
 
 static int
-ftrace_code_disable(struct module *mod, struct dyn_ftrace *rec)
+ftrace_code_disable(struct module *mod, struct fentry *rec)
 {
 	unsigned long ip;
 	int ret;
@@ -2267,7 +2268,7 @@ static inline int ops_traces_mod(struct ftrace_ops *ops)
  * If the ops ignores the function via notrace filter, skip it.
  */
 static inline bool
-ops_references_rec(struct ftrace_ops *ops, struct dyn_ftrace *rec)
+ops_references_rec(struct ftrace_ops *ops, struct fentry *rec)
 {
 	/* If ops isn't enabled, ignore it */
 	if (!(ops->flags & FTRACE_OPS_FL_ENABLED))
@@ -2289,7 +2290,7 @@ ops_references_rec(struct ftrace_ops *ops, struct dyn_ftrace *rec)
 	return 1;
 }
 
-static int referenced_filters(struct dyn_ftrace *rec)
+static int referenced_filters(struct fentry *rec)
 {
 	struct ftrace_ops *ops;
 	int cnt = 0;
@@ -2305,7 +2306,7 @@ static int referenced_filters(struct dyn_ftrace *rec)
 static int ftrace_update_code(struct module *mod, struct ftrace_page *new_pgs)
 {
 	struct ftrace_page *pg;
-	struct dyn_ftrace *p;
+	struct fentry *p;
 	cycle_t start, stop;
 	unsigned long update_cnt = 0;
 	unsigned long ref = 0;
@@ -2474,7 +2475,7 @@ struct ftrace_iterator {
 	loff_t				pos;
 	loff_t				func_pos;
 	struct ftrace_page		*pg;
-	struct dyn_ftrace		*func;
+	struct fentry		*func;
 	struct ftrace_func_probe	*probe;
 	struct trace_parser		parser;
 	struct ftrace_hash		*hash;
@@ -2579,7 +2580,7 @@ t_next(struct seq_file *m, void *v, loff_t *pos)
 {
 	struct ftrace_iterator *iter = m->private;
 	struct ftrace_ops *ops = iter->ops;
-	struct dyn_ftrace *rec = NULL;
+	struct fentry *rec = NULL;
 
 	if (unlikely(ftrace_disabled))
 		return NULL;
@@ -2609,7 +2610,7 @@ t_next(struct seq_file *m, void *v, loff_t *pos)
 		     !ftrace_lookup_ip(ops->notrace_hash, rec->ip)) ||
 
 		    ((iter->flags & FTRACE_ITER_ENABLED) &&
-		     !(rec->flags & FTRACE_FL_ENABLED))) {
+		     !(rec->flags & FENTRY_FL_ENABLED))) {
 
 			rec = NULL;
 			goto retry;
@@ -2694,7 +2695,7 @@ static void t_stop(struct seq_file *m, void *p)
 static int t_show(struct seq_file *m, void *v)
 {
 	struct ftrace_iterator *iter = m->private;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 
 	if (iter->flags & FTRACE_ITER_HASH)
 		return t_hash_show(m, iter);
@@ -2712,8 +2713,8 @@ static int t_show(struct seq_file *m, void *v)
 	seq_printf(m, "%ps", (void *)rec->ip);
 	if (iter->flags & FTRACE_ITER_ENABLED)
 		seq_printf(m, " (%ld)%s",
-			   rec->flags & ~FTRACE_FL_MASK,
-			   rec->flags & FTRACE_FL_REGS ? " R" : "");
+			   rec->flags & ~FENTRY_FL_MASK,
+			   rec->flags & FENTRY_FL_REGS ? " R" : "");
 	seq_printf(m, "\n");
 
 	return 0;
@@ -2900,7 +2901,7 @@ static int ftrace_match(char *str, char *regex, int len, int type)
 }
 
 static int
-enter_record(struct ftrace_hash *hash, struct dyn_ftrace *rec, int not)
+enter_record(struct ftrace_hash *hash, struct fentry *rec, int not)
 {
 	struct ftrace_func_entry *entry;
 	int ret = 0;
@@ -2923,7 +2924,7 @@ enter_record(struct ftrace_hash *hash, struct dyn_ftrace *rec, int not)
 }
 
 static int
-ftrace_match_record(struct dyn_ftrace *rec, char *mod,
+ftrace_match_record(struct fentry *rec, char *mod,
 		    char *regex, int len, int type)
 {
 	char str[KSYM_SYMBOL_LEN];
@@ -2950,7 +2951,7 @@ match_records(struct ftrace_hash *hash, char *buff,
 {
 	unsigned search_len = 0;
 	struct ftrace_page *pg;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	int type = MATCH_FULL;
 	char *search = buff;
 	int found = 0;
@@ -3151,7 +3152,7 @@ register_ftrace_function_probe(char *glob, struct ftrace_probe_ops *ops,
 	struct ftrace_hash **orig_hash = &trace_probe_ops.filter_hash;
 	struct ftrace_hash *hash;
 	struct ftrace_page *pg;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	int type, len, not;
 	unsigned long key;
 	int count = 0;
@@ -3984,7 +3985,7 @@ ftrace_graph_release(struct inode *inode, struct file *file)
 static int
 ftrace_set_func(unsigned long *array, int *idx, int size, char *buffer)
 {
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	struct ftrace_page *pg;
 	int search_len;
 	int fail = 1;
@@ -4179,7 +4180,7 @@ static int ftrace_process_locs(struct module *mod,
 {
 	struct ftrace_page *start_pg;
 	struct ftrace_page *pg;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	unsigned long count;
 	unsigned long *p;
 	unsigned long addr;
@@ -4278,7 +4279,7 @@ static int ftrace_process_locs(struct module *mod,
 
 void ftrace_release_mod(struct module *mod)
 {
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	struct ftrace_page **last_pg;
 	struct ftrace_page *pg;
 	int order;

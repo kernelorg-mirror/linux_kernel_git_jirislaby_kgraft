@@ -13,6 +13,7 @@
 
 #include <asm/cacheflush.h>
 #include <linux/ftrace.h>
+#include <linux/fentry.h>
 
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 /*
@@ -118,7 +119,7 @@ static unsigned int bralid; /* saving whole bralid instruction */
 #endif
 
 int ftrace_make_nop(struct module *mod,
-			struct dyn_ftrace *rec, unsigned long addr)
+			struct fentry *rec, unsigned long addr)
 {
 	/* we have this part of code which we are working with
 	 * b000c000        imm     -16384
@@ -158,7 +159,7 @@ int ftrace_make_nop(struct module *mod,
 }
 
 /* I believe that first is called ftrace_make_nop before this function */
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	int ret;
 	pr_debug("%s: addr:0x%x, rec->ip: 0x%x, imm:0x%x\n",

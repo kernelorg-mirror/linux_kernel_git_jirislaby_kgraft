@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/list.h>
+#include <linux/fentry.h>
 #include <linux/module.h>
 
 #include <trace/syscall.h>
@@ -57,7 +58,7 @@ static const unsigned char *ftrace_nop_replace(void)
 }
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	union insn_call_jmp_union insn;
 	unsigned const char *new;
@@ -83,7 +84,7 @@ int ftrace_make_nop(struct module *mod,
 	return -EINVAL;
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	union insn_call_jmp_union insn;
 	unsigned const char *old;
@@ -141,7 +142,7 @@ ftrace_modify_code(unsigned long ip, unsigned const char *old_code,
  *  but not to convert a function from not using regs to one that uses
  *  regs, which ftrace_modify_call() is for.
  */
-int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
+int ftrace_modify_call(struct fentry *rec, unsigned long old_addr,
 				 unsigned long addr)
 {
 	WARN_ON(1);
@@ -255,7 +256,7 @@ static int add_break(unsigned long ip, const char *old)
 	return ftrace_write(ip, &brk, 1);
 }
 
-static int add_brk_on_call(struct dyn_ftrace *rec, unsigned long addr)
+static int add_brk_on_call(struct fentry *rec, unsigned long addr)
 {
 	union insn_call_jmp_union insn;
 	unsigned long ip = rec->ip;
@@ -266,7 +267,7 @@ static int add_brk_on_call(struct dyn_ftrace *rec, unsigned long addr)
 }
 
 
-static int add_brk_on_nop(struct dyn_ftrace *rec)
+static int add_brk_on_nop(struct fentry *rec)
 {
 	unsigned const char *old;
 
@@ -276,32 +277,32 @@ static int add_brk_on_nop(struct dyn_ftrace *rec)
 }
 
 /*
- * If the record has the FTRACE_FL_REGS set, that means that it
- * wants to convert to a callback that saves all regs. If FTRACE_FL_REGS
+ * If the record has the FENTRY_FL_REGS set, that means that it
+ * wants to convert to a callback that saves all regs. If FENTRY_FL_REGS
  * is not not set, then it wants to convert to the normal callback.
  */
-static unsigned long get_ftrace_addr(struct dyn_ftrace *rec)
+static unsigned long get_ftrace_addr(struct fentry *rec)
 {
-	if (rec->flags & FTRACE_FL_REGS)
+	if (rec->flags & FENTRY_FL_REGS)
 		return (unsigned long)FTRACE_REGS_ADDR;
 	else
 		return (unsigned long)FTRACE_ADDR;
 }
 
 /*
- * The FTRACE_FL_REGS_EN is set when the record already points to
+ * The FENTRY_FL_REGS_EN is set when the record already points to
  * a function that saves all the regs. Basically the '_EN' version
  * represents the current state of the function.
  */
-static unsigned long get_ftrace_old_addr(struct dyn_ftrace *rec)
+static unsigned long get_ftrace_old_addr(struct fentry *rec)
 {
-	if (rec->flags & FTRACE_FL_REGS_EN)
+	if (rec->flags & FENTRY_FL_REGS_EN)
 		return (unsigned long)FTRACE_REGS_ADDR;
 	else
 		return (unsigned long)FTRACE_ADDR;
 }
 
-static int add_breakpoints(struct dyn_ftrace *rec, int enable)
+static int add_breakpoints(struct fentry *rec, int enable)
 {
 	unsigned long ftrace_addr;
 	int ret;
@@ -337,7 +338,7 @@ static int add_breakpoints(struct dyn_ftrace *rec, int enable)
  * we replace the breakpoint with the nop. Otherwise we replace
  * it with the call instruction.
  */
-static int remove_breakpoint(struct dyn_ftrace *rec)
+static int remove_breakpoint(struct fentry *rec)
 {
 	union insn_call_jmp_union insn;
 	unsigned char ins[MCOUNT_INSN_SIZE];
@@ -393,7 +394,7 @@ static int add_update_code(unsigned long ip, unsigned const char *new)
 	return ftrace_write(ip, new, MCOUNT_INSN_SIZE - 1);
 }
 
-static int add_update_call(struct dyn_ftrace *rec, unsigned long addr)
+static int add_update_call(struct fentry *rec, unsigned long addr)
 {
 	union insn_call_jmp_union insn;
 	unsigned long ip = rec->ip;
@@ -402,7 +403,7 @@ static int add_update_call(struct dyn_ftrace *rec, unsigned long addr)
 	return add_update_code(ip, insn.code);
 }
 
-static int add_update_nop(struct dyn_ftrace *rec)
+static int add_update_nop(struct fentry *rec)
 {
 	unsigned long ip = rec->ip;
 	unsigned const char *new;
@@ -411,7 +412,7 @@ static int add_update_nop(struct dyn_ftrace *rec)
 	return add_update_code(ip, new);
 }
 
-static int add_update(struct dyn_ftrace *rec, int enable)
+static int add_update(struct fentry *rec, int enable)
 {
 	unsigned long ftrace_addr;
 	int ret;
@@ -438,7 +439,7 @@ static int add_update(struct dyn_ftrace *rec, int enable)
 	return 0;
 }
 
-static int finish_update_call(struct dyn_ftrace *rec, unsigned long addr)
+static int finish_update_call(struct fentry *rec, unsigned long addr)
 {
 	union insn_call_jmp_union insn;
 	unsigned long ip = rec->ip;
@@ -448,7 +449,7 @@ static int finish_update_call(struct dyn_ftrace *rec, unsigned long addr)
 	return ftrace_write(ip, insn.code, 1);
 }
 
-static int finish_update_nop(struct dyn_ftrace *rec)
+static int finish_update_nop(struct fentry *rec)
 {
 	unsigned long ip = rec->ip;
 	unsigned const char *new;
@@ -458,7 +459,7 @@ static int finish_update_nop(struct dyn_ftrace *rec)
 	return ftrace_write(ip, new, 1);
 }
 
-static int finish_update(struct dyn_ftrace *rec, int enable)
+static int finish_update(struct fentry *rec, int enable)
 {
 	unsigned long ftrace_addr;
 	int ret;
@@ -505,7 +506,7 @@ static void run_sync(void)
 void ftrace_replace_code(int enable)
 {
 	struct ftrace_rec_iter *iter;
-	struct dyn_ftrace *rec;
+	struct fentry *rec;
 	const char *report = "adding breakpoints";
 	int count = 0;
 	int ret;

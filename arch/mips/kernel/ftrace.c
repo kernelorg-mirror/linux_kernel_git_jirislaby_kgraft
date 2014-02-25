@@ -11,6 +11,7 @@
 #include <linux/uaccess.h>
 #include <linux/init.h>
 #include <linux/ftrace.h>
+#include <linux/fentry.h>
 #include <linux/syscalls.h>
 
 #include <asm/asm.h>
@@ -155,7 +156,7 @@ static int ftrace_modify_code_2(unsigned long ip, unsigned int new_code1,
 #define INSN_B_1F (0x10000000 | MCOUNT_OFFSET_INSNS)
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	unsigned int new;
 	unsigned long ip = rec->ip;
@@ -179,7 +180,7 @@ int ftrace_make_nop(struct module *mod,
 #endif
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned int new;
 	unsigned long ip = rec->ip;

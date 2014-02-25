@@ -5,6 +5,7 @@
  * Dynamic ftrace support.
  */
 
+#include <linux/fentry.h>
 #include <linux/ftrace.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
@@ -94,7 +95,7 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 }
 
 int ftrace_make_nop(struct module *mod,
-		    struct dyn_ftrace *rec, unsigned long addr)
+		    struct fentry *rec, unsigned long addr)
 {
 	unsigned char *new, *old;
 	unsigned long ip = rec->ip;
@@ -105,7 +106,7 @@ int ftrace_make_nop(struct module *mod,
 	return ftrace_modify_code(ip, old, new);
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	unsigned char *new, *old;
 	unsigned long ip = rec->ip;

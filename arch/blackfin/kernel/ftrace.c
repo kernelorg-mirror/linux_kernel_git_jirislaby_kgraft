@@ -7,6 +7,7 @@
 
 #include <linux/ftrace.h>
 #include <linux/kernel.h>
+#include <linux/fentry.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/atomic.h>
@@ -38,14 +39,14 @@ static int ftrace_modify_code(unsigned long ip, const unsigned char *code,
 	return ret;
 }
 
-int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
+int ftrace_make_nop(struct module *mod, struct fentry *rec,
                     unsigned long addr)
 {
 	/* Turn the mcount call site into two MNOPs as those are 32bit insns */
 	return ftrace_modify_code(rec->ip, mnop, sizeof(mnop));
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	/* Restore the mcount call site */
 	unsigned char call[8];

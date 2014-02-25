@@ -11,6 +11,7 @@
 #include <linux/uaccess.h>
 #include <linux/ftrace.h>
 #include <linux/kernel.h>
+#include <linux/fentry.h>
 #include <linux/types.h>
 #include <linux/kprobes.h>
 #include <trace/syscall.h>
@@ -108,7 +109,7 @@ asm(
 #endif /* CONFIG_64BIT */
 
 
-int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
+int ftrace_make_nop(struct module *mod, struct fentry *rec,
 		    unsigned long addr)
 {
 	if (probe_kernel_write((void *) rec->ip, ftrace_disable_code,
@@ -117,7 +118,7 @@ int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
 	return 0;
 }
 
-int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
+int ftrace_make_call(struct fentry *rec, unsigned long addr)
 {
 	if (probe_kernel_write((void *) rec->ip, ftrace_enable_insn,
 			       FTRACE_INSN_SIZE))
