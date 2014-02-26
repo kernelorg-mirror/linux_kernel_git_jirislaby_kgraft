@@ -1949,7 +1949,7 @@ ftrace_code_disable(struct module *mod, struct fentry *rec)
 
 	ret = fentry_make_nop(mod, rec, MCOUNT_ADDR);
 	if (ret)
-		ftrace_bug(ret, ip);
+		pr_err("%s: cannot make nop at %pS\n", __func__, (void *)ip);
 
 	return ret;
 }
