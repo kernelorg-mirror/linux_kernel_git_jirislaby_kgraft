@@ -2292,12 +2292,9 @@ static int referenced_filters(struct fentry *rec)
 	return cnt;
 }
 
-static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
+static int ftrace_init_install(struct module *mod, struct fentry_page *new_pgs)
 {
 	struct fentry_page *pg;
-	struct fentry *p;
-	ktime_t start;
-	unsigned long update_cnt = 0;
 	unsigned long ref = 0;
 	bool test = false;
 	int i, ret;
@@ -2322,27 +2319,15 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 		}
 	}
 
-	start = ktime_get();
-
 	for (pg = new_pgs; pg; pg = pg->next) {
 
 		for (i = 0; i < pg->index; i++) {
+			struct fentry *p = &pg->records[i];
 			int cnt = ref;
 
-			p = &pg->records[i];
 			if (test)
 				cnt += referenced_filters(p);
 			p->flags = cnt;
-
-			/*
-			 * Do the initial record conversion from mcount jump
-			 * to the NOP instructions.
-			 */
-			ret = ftrace_code_disable(mod, p);
-			if (ret)
-				return ret;
-
-			update_cnt++;
 
 			/*
 			 * If the tracing is enabled, go ahead and enable the record.
@@ -2362,6 +2347,41 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 			}
 		}
 	}
+
+	return 0;
+}
+
+static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
+{
+	struct fentry_page *pg;
+	struct fentry *p;
+	ktime_t start;
+	unsigned long update_cnt = 0;
+	int i, ret;
+
+	start = ktime_get();
+
+	for (pg = new_pgs; pg; pg = pg->next) {
+
+		for (i = 0; i < pg->index; i++) {
+
+			p = &pg->records[i];
+
+			/*
+			 * Do the initial record conversion from fentry jump
+			 * to the NOP instructions.
+			 */
+			ret = ftrace_code_disable(mod, p);
+			if (ret)
+				return ret;
+
+			update_cnt++;
+		}
+	}
+
+	ret = ftrace_init_install(mod, new_pgs);
+	if (ret)
+		return ret;
 
 	ftrace_update_time = ktime_sub(ktime_get(), start);
 	ftrace_update_tot_cnt += update_cnt;
