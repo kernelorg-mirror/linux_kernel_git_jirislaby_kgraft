@@ -1947,15 +1947,11 @@ ftrace_code_disable(struct module *mod, struct fentry *rec)
 
 	ip = rec->ip;
 
-	if (unlikely(ftrace_disabled))
-		return 0;
-
 	ret = fentry_make_nop(mod, rec, MCOUNT_ADDR);
-	if (ret) {
+	if (ret)
 		ftrace_bug(ret, ip);
-		return 0;
-	}
-	return 1;
+
+	return ret;
 }
 
 /*
@@ -2304,7 +2300,7 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 	unsigned long update_cnt = 0;
 	unsigned long ref = 0;
 	bool test = false;
-	int i;
+	int i, ret;
 
 	/*
 	 * When adding a module, we need to check if tracers are
@@ -2333,10 +2329,6 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 		for (i = 0; i < pg->index; i++) {
 			int cnt = ref;
 
-			/* If something went wrong, bail without enabling anything */
-			if (unlikely(ftrace_disabled))
-				return -1;
-
 			p = &pg->records[i];
 			if (test)
 				cnt += referenced_filters(p);
@@ -2346,8 +2338,9 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 			 * Do the initial record conversion from mcount jump
 			 * to the NOP instructions.
 			 */
-			if (!ftrace_code_disable(mod, p))
-				break;
+			ret = ftrace_code_disable(mod, p);
+			if (ret)
+				return ret;
 
 			update_cnt++;
 
@@ -2361,9 +2354,11 @@ static int ftrace_update_code(struct module *mod, struct fentry_page *new_pgs)
 			 * passing the ftrace_make_call check.
 			 */
 			if (ftrace_start_up && cnt) {
-				int failed = __ftrace_replace_code(p, 1);
-				if (failed)
-					ftrace_bug(failed, p->ip);
+				ret = __ftrace_replace_code(p, 1);
+				if (ret) {
+					ftrace_bug(ret, p->ip);
+					return ret;
+				}
 			}
 		}
 	}
@@ -4255,10 +4250,9 @@ static int ftrace_process_locs(struct module *mod,
 	 */
 	if (!mod)
 		local_irq_save(flags);
-	ftrace_update_code(mod, start_pg);
+	ret = ftrace_update_code(mod, start_pg);
 	if (!mod)
 		local_irq_restore(flags);
-	ret = 0;
  out:
 	mutex_unlock(&ftrace_lock);
 
@@ -4316,7 +4310,8 @@ static void ftrace_init_module(struct module *mod,
 {
 	if (ftrace_disabled || start == end)
 		return;
-	ftrace_process_locs(mod, start, end);
+	if (ftrace_process_locs(mod, start, end))
+		ftrace_disabled = 1;
 }
 
 static int ftrace_module_notify_enter(struct notifier_block *self,
@@ -4391,6 +4386,8 @@ void __init ftrace_init(void)
 	ret = ftrace_process_locs(NULL,
 				  __start_mcount_loc,
 				  __stop_mcount_loc);
+	if (ret)
+		goto failed;
 
 	ret = register_module_notifier(&ftrace_module_enter_nb);
 	if (ret)
