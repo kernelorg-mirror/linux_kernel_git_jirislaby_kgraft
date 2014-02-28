@@ -52,6 +52,15 @@ extern struct fentry_page *fentry_pages_start;
 extern unsigned long fentry_count;
 extern bool fentry_enabled;
 
+#define for_each_fentry(pg, rec, i)						\
+	for (pg = fentry_pages_start, i = 0, rec = &pg->records[i]; pg;		\
+			({ if (++i >= pg->index) {				\
+				pg = pg->next;					\
+				i = 0;						\
+			}							\
+			if (pg)							\
+				rec = &pg->records[i]; }))
+
 /**
  * fentry_make_nop - convert code into nop
  * @mod: module structure if called by module load initialization

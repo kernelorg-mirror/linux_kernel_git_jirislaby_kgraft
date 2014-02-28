@@ -1464,21 +1464,6 @@ ftrace_ops_test(struct ftrace_ops *ops, unsigned long ip, void *regs)
 	return ret;
 }
 
-/*
- * This is a double for. Do not use 'break' to break out of the loop,
- * you must use a goto.
- */
-#define do_for_each_ftrace_rec(pg, rec)					\
-	for (pg = fentry_pages_start; pg; pg = pg->next) {		\
-		int _____i;						\
-		for (_____i = 0; _____i < pg->index; _____i++) {	\
-			rec = &pg->records[_____i];
-
-#define while_for_each_ftrace_rec()		\
-		}				\
-	}
-
-
 static int ftrace_cmp_recs(const void *a, const void *b)
 {
 	const struct fentry *key = a;
@@ -1558,6 +1543,7 @@ static void __ftrace_hash_rec_update(struct ftrace_ops *ops,
 	struct fentry *rec;
 	int count = 0;
 	int all = 0;
+	int i;
 
 	/* Only update if the ops has been registered */
 	if (!(ops->flags & FTRACE_OPS_FL_ENABLED))
@@ -1591,7 +1577,7 @@ static void __ftrace_hash_rec_update(struct ftrace_ops *ops,
 			return;
 	}
 
-	do_for_each_ftrace_rec(pg, rec) {
+	for_each_fentry(pg, rec, i) {
 		int in_other_hash = 0;
 		int in_hash = 0;
 		int match = 0;
@@ -1638,7 +1624,7 @@ static void __ftrace_hash_rec_update(struct ftrace_ops *ops,
 		/* Shortcut, if we handled all records, we are done. */
 		if (!all && count == hash->count)
 			return;
-	} while_for_each_ftrace_rec();
+	}
 }
 
 static void ftrace_hash_rec_disable(struct ftrace_ops *ops,
@@ -1846,18 +1832,19 @@ void __weak ftrace_replace_code(int enable)
 	struct fentry *rec;
 	struct fentry_page *pg;
 	int failed;
+	int i;
 
 	if (unlikely(ftrace_disabled))
 		return;
 
-	do_for_each_ftrace_rec(pg, rec) {
+	for_each_fentry(pg, rec, i) {
 		failed = __ftrace_replace_code(rec, enable);
 		if (failed) {
 			ftrace_bug(failed, rec->ip);
 			/* Stop processing */
 			return;
 		}
-	} while_for_each_ftrace_rec();
+	}
 }
 
 struct ftrace_rec_iter {
@@ -2812,7 +2799,7 @@ match_records(struct ftrace_hash *hash, char *buff,
 	int type = MATCH_FULL;
 	char *search = buff;
 	int found = 0;
-	int ret;
+	int ret, i;
 
 	if (len) {
 		type = filter_parse_regex(buff, len, &search, &not);
@@ -2824,7 +2811,7 @@ match_records(struct ftrace_hash *hash, char *buff,
 	if (unlikely(ftrace_disabled))
 		goto out_unlock;
 
-	do_for_each_ftrace_rec(pg, rec) {
+	for_each_fentry(pg, rec, i) {
 		if (ftrace_match_record(rec, mod, search, search_len, type)) {
 			ret = enter_record(hash, rec, not);
 			if (ret < 0) {
@@ -2833,7 +2820,7 @@ match_records(struct ftrace_hash *hash, char *buff,
 			}
 			found = 1;
 		}
-	} while_for_each_ftrace_rec();
+	}
  out_unlock:
 	mutex_unlock(&ftrace_lock);
 
@@ -3014,7 +3001,7 @@ register_ftrace_function_probe(char *glob, struct ftrace_probe_ops *ops,
 	unsigned long key;
 	int count = 0;
 	char *search;
-	int ret;
+	int ret, i;
 
 	type = filter_parse_regex(glob, strlen(glob), &search, &not);
 	len = strlen(search);
@@ -3038,7 +3025,7 @@ register_ftrace_function_probe(char *glob, struct ftrace_probe_ops *ops,
 
 	mutex_lock(&ftrace_lock);
 
-	do_for_each_ftrace_rec(pg, rec) {
+	for_each_fentry(pg, rec, i) {
 
 		if (!ftrace_match_record(rec, NULL, search, len, type))
 			continue;
@@ -3081,7 +3068,7 @@ register_ftrace_function_probe(char *glob, struct ftrace_probe_ops *ops,
 		key = hash_long(entry->ip, FTRACE_HASH_BITS);
 		hlist_add_head_rcu(&entry->node, &ftrace_func_hash[key]);
 
-	} while_for_each_ftrace_rec();
+	}
 
 	ret = ftrace_hash_move(&trace_probe_ops, 1, orig_hash, hash);
 	if (ret < 0)
@@ -3849,7 +3836,7 @@ ftrace_set_func(unsigned long *array, int *idx, int size, char *buffer)
 	int type, not;
 	char *search;
 	bool exists;
-	int i;
+	int i, j;
 
 	/* decode regex */
 	type = filter_parse_regex(buffer, strlen(buffer), &search, &not);
@@ -3865,7 +3852,7 @@ ftrace_set_func(unsigned long *array, int *idx, int size, char *buffer)
 		return -ENODEV;
 	}
 
-	do_for_each_ftrace_rec(pg, rec) {
+	for_each_fentry(pg, rec, j) {
 
 		if (ftrace_match_record(rec, NULL, search, search_len, type)) {
 			/* if it is in the array */
@@ -3892,7 +3879,7 @@ ftrace_set_func(unsigned long *array, int *idx, int size, char *buffer)
 				}
 			}
 		}
-	} while_for_each_ftrace_rec();
+	}
 out:
 	mutex_unlock(&ftrace_lock);
 
