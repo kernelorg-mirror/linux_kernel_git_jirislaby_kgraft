@@ -71,7 +71,7 @@ static int fentry_allocate_records(struct fentry_page *pg, int count)
 }
 
 static struct fentry_page *
-fentry_allocate_pages(unsigned long num_to_init)
+fentry_allocate_pages(struct module *mod, unsigned long num_to_init)
 {
 	struct fentry_page *start_pg;
 	struct fentry_page *pg;
@@ -91,6 +91,8 @@ fentry_allocate_pages(unsigned long num_to_init)
 	 * waste as little space as possible.
 	 */
 	for (;;) {
+		pg->mod = mod;
+
 		cnt = fentry_allocate_records(pg, num_to_init);
 		if (cnt < 0)
 			goto free_pages;
@@ -217,7 +219,7 @@ static int fentry_process_locs(struct module *mod,
 	sort(start, count, sizeof(*start),
 	     fentry_cmp_ips, fentry_swap_ips);
 
-	start_pg = fentry_allocate_pages(count);
+	start_pg = fentry_allocate_pages(mod, count);
 	if (!start_pg)
 		return -ENOMEM;
 

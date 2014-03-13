@@ -43,6 +43,7 @@ struct fentry {
 struct fentry_page {
 	struct fentry_page	*next;
 	struct fentry		*records;
+	struct module		*mod;
 	int			index;
 	int			size;
 };
