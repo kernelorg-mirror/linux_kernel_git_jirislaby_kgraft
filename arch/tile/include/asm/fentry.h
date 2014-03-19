@@ -12,4 +12,28 @@
  *   more details.
  */
 
-#include <asm/fentry.h>
+#ifndef _ASM_TILE_FENTRY_H
+#define _ASM_TILE_FENTRY_H
+
+#ifdef CONFIG_FENTRY_RECORD_LIB
+
+#define MCOUNT_ADDR ((unsigned long)(__mcount))
+#define MCOUNT_INSN_SIZE 8		/* sizeof mcount call */
+
+#ifndef __ASSEMBLY__
+
+extern void __mcount(void);
+
+static inline unsigned long fentry_call_adjust(unsigned long addr)
+{
+	return addr;
+}
+
+struct fentry_arch {
+};
+
+#endif /* __ASSEMBLY__ */
+
+#endif /* CONFIG_FENTRY_RECORD_LIB */
+
+#endif /* _ASM_TILE_FENTRY_H */
