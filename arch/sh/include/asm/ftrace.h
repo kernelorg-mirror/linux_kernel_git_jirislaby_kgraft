@@ -1,15 +1,13 @@
 #ifndef __ASM_SH_FTRACE_H
 #define __ASM_SH_FTRACE_H
 
+#include <asm/fentry.h>
+
 #ifdef CONFIG_FUNCTION_TRACER
 
-#define MCOUNT_INSN_SIZE	4 /* sizeof mcount call */
 #define FTRACE_SYSCALL_MAX	NR_syscalls
 
 #ifndef __ASSEMBLY__
-extern void mcount(void);
-
-#define MCOUNT_ADDR		((long)(mcount))
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 #define CALL_ADDR		((long)(ftrace_call))
@@ -20,17 +18,7 @@ extern void mcount(void);
 #define MCOUNT_INSN_OFFSET	((STUB_ADDR - CALL_ADDR) - 4)
 #define GRAPH_INSN_OFFSET	((CALLER_ADDR - GRAPH_ADDR) - 4)
 
-struct fentry_arch {
-	/* No extra data needed on sh */
-};
-
 #endif /* CONFIG_DYNAMIC_FTRACE */
-
-static inline unsigned long fentry_call_adjust(unsigned long addr)
-{
-	/* 'addr' is the memory table address. */
-	return addr;
-}
 
 #endif /* __ASSEMBLY__ */
 #endif /* CONFIG_FUNCTION_TRACER */
