@@ -10,14 +10,11 @@
 #ifndef _ASM_MIPS_FTRACE_H
 #define _ASM_MIPS_FTRACE_H
 
+#include <asm/fentry.h>
+
 #ifdef CONFIG_FUNCTION_TRACER
 
-#define MCOUNT_ADDR ((unsigned long)(_mcount))
-#define MCOUNT_INSN_SIZE 4		/* sizeof mcount call */
-
 #ifndef __ASSEMBLY__
-extern void _mcount(void);
-#define mcount _mcount
 
 #define safe_load(load, src, dst, error)		\
 do {							\
@@ -75,16 +72,6 @@ do {						\
 	safe_store(STR(PTR_S), src, dst, error)
 
 
-#ifdef CONFIG_DYNAMIC_FTRACE
-static inline unsigned long fentry_call_adjust(unsigned long addr)
-{
-	return addr;
-}
-
-struct fentry_arch {
-};
-
-#endif /*  CONFIG_DYNAMIC_FTRACE */
 #endif /* __ASSEMBLY__ */
 #endif /* CONFIG_FUNCTION_TRACER */
 #endif /* _ASM_MIPS_FTRACE_H */
