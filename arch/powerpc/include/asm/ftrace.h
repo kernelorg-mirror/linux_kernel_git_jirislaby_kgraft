@@ -1,9 +1,9 @@
 #ifndef _ASM_POWERPC_FTRACE
 #define _ASM_POWERPC_FTRACE
 
+#include <asm/fentry.h>
+
 #ifdef CONFIG_FUNCTION_TRACER
-#define MCOUNT_ADDR		((long)(_mcount))
-#define MCOUNT_INSN_SIZE	4 /* sizeof mcount call */
 
 #ifdef __ASSEMBLY__
 
@@ -42,20 +42,6 @@
 	lwz	r10,40(r1);			\
 	addi	r1, r1, 48
 
-#else /* !__ASSEMBLY__ */
-extern void _mcount(void);
-
-#ifdef CONFIG_DYNAMIC_FTRACE
-static inline unsigned long fentry_call_adjust(unsigned long addr)
-{
-       /* reloction of mcount call site is the same as the address */
-       return addr;
-}
-
-struct fentry_arch {
-	struct module *mod;
-};
-#endif /*  CONFIG_DYNAMIC_FTRACE */
 #endif /* __ASSEMBLY__ */
 
 #endif
