@@ -8,25 +8,9 @@
 #ifndef __ASM_BFIN_FTRACE_H__
 #define __ASM_BFIN_FTRACE_H__
 
-#define MCOUNT_INSN_SIZE	6 /* sizeof "[++sp] = rets; call __mcount;" */
+#include <asm/fentry.h>
 
 #ifndef __ASSEMBLY__
-
-#ifdef CONFIG_DYNAMIC_FTRACE
-
-extern void _mcount(void);
-#define MCOUNT_ADDR ((unsigned long)_mcount)
-
-static inline unsigned long fentry_call_adjust(unsigned long addr)
-{
-	return addr;
-}
-
-struct fentry_arch {
-	/* No extra data needed for Blackfin */
-};
-
-#endif
 
 #ifdef CONFIG_FRAME_POINTER
 #include <linux/mm.h>
