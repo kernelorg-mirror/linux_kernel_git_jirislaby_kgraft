@@ -43,10 +43,6 @@ KBUILD_CFLAGS += -Wa,--undeclared-regs
 KBUILD_CFLAGS += $(call cc-option,-mtune=ultrasparc3)
 KBUILD_AFLAGS += -m64 -mcpu=ultrasparc -Wa,--undeclared-regs
 
-ifeq ($(CONFIG_MCOUNT),y)
-  KBUILD_CFLAGS += -pg
-endif
-
 endif
 
 head-y                 := arch/sparc/kernel/head_$(BITS).o

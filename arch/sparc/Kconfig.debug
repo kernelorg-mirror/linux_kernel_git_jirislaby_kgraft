@@ -10,15 +10,9 @@ config DEBUG_DCFLUSH
 	bool "D-cache flush debugging"
 	depends on SPARC64 && DEBUG_KERNEL
 
-config MCOUNT
-	bool
-	depends on SPARC64
-	depends on FUNCTION_TRACER
-	default y
-
 config FRAME_POINTER
 	bool
-	depends on MCOUNT
+	depends on FUNCTION_TRACER
 	default y
 
 endmenu

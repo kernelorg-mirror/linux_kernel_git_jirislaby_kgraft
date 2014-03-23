@@ -34,7 +34,7 @@ EXPORT_SYMBOL(__bzero);
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial);
 
-#ifdef CONFIG_MCOUNT
+#ifdef CONFIG_DYNAMIC_FTRACE
 EXPORT_SYMBOL(_mcount);
 #endif
 
