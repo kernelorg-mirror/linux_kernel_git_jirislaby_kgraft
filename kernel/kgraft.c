@@ -20,6 +20,7 @@
 #include <linux/hardirq.h> /* for in_interrupt() */
 #include <linux/kallsyms.h>
 #include <linux/kgraft.h>
+#include <linux/list.h>
 #include <linux/livepatch.h>
 #include <linux/module.h>
 #include <linux/percpu.h>
@@ -37,6 +38,7 @@ static void kgr_work_fn(struct work_struct *work);
 static struct workqueue_struct *kgr_wq;
 static DECLARE_DELAYED_WORK(kgr_work, kgr_work_fn);
 static DEFINE_MUTEX(kgr_in_progress_lock);
+static LIST_HEAD(kgr_patches);
 static bool __percpu *kgr_irq_use_new;
 bool kgr_in_progress;
 static bool kgr_initialized;
@@ -89,19 +91,37 @@ static notrace void kgr_stub_slow(unsigned long ip, unsigned long parent_ip,
 	/* Redirect the function unless we continue with the original one. */
 	if (go_new)
 		klp_arch_set_pc(regs, (unsigned long)p->new_fun);
+	else if (p->loc_old != p->loc_name)
+		klp_arch_set_pc(regs, p->loc_old);
+}
+
+static void kgr_refs_inc(void)
+{
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &kgr_patches, list)
+		p->refs++;
+}
+
+static void kgr_refs_dec(void)
+{
+	struct kgr_patch *p;
+
+	list_for_each_entry(p, &kgr_patches, list)
+		p->refs--;
 }
 
 static int kgr_ftrace_enable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
 {
 	int ret;
 
-	ret = ftrace_set_filter_ip(fops, pf->loc_old, 0, 0);
+	ret = ftrace_set_filter_ip(fops, pf->loc_name, 0, 0);
 	if (ret)
 		return ret;
 
 	ret = register_ftrace_function(fops);
 	if (ret)
-		ftrace_set_filter_ip(fops, pf->loc_old, 1, 0);
+		ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
 
 	return ret;
 }
@@ -114,7 +134,7 @@ static int kgr_ftrace_disable(struct kgr_patch_fun *pf, struct ftrace_ops *fops)
 	if (ret)
 		return ret;
 
-	ret = ftrace_set_filter_ip(fops, pf->loc_old, 1, 0);
+	ret = ftrace_set_filter_ip(fops, pf->loc_name, 1, 0);
 	if (ret)
 		register_ftrace_function(fops);
 
@@ -157,8 +177,11 @@ static void kgr_finalize(void)
 
 	free_percpu(kgr_irq_use_new);
 
-	if (kgr_revert)
+	if (kgr_revert) {
+		kgr_refs_dec();
 		module_put(kgr_patch->owner);
+	} else
+		list_add_tail(&kgr_patch->list, &kgr_patches);
 
 	kgr_patch = NULL;
 	kgr_in_progress = false;
@@ -266,6 +289,116 @@ static void kgr_handle_irqs(void)
 	schedule_on_each_cpu(kgr_handle_irq_cpu);
 }
 
+/*
+ * There might be different variants of a function in different patches.
+ * The patches are stacked in the order in which they are added. The variant
+ * of a function from a newer patch takes precedence over the older variants
+ * and makes the older variants unused.
+ *
+ * There might be an interim time when two variants of the same function
+ * might be used by the system. Therefore we split the patches into two
+ * categories.
+ *
+ * One patch might be in progress. It is either being added or being reverted.
+ * In each case, there might be threads that are using the code from this patch
+ * and also threads that are using the old code. Where the old code is the
+ * original code or the code from the previous patch if any. This patch
+ * might be found in the variable kgr_patch.
+ *
+ * The other patches are finalized. It means that the whole system started
+ * using them at some point. Note that some parts of the patches might be
+ * unused when there appeared new variants in newer patches. Also some threads
+ * might already started using the patch in progress. Anyway, the finalized
+ * patches might be found in the list kgr_patches.
+ *
+ * When manipulating the patches, we need to search and check the right variant
+ * of a function on the stack. The following types are used to define
+ * the requested variant.
+ */
+enum kgr_find_type {
+	/*
+	 * Find previous function variant in respect to stacking. Take
+	 * into account even the patch in progress that is considered to be
+	 * on top of the stack.
+	 */
+	KGR_PREVIOUS,
+	/* Find the last finalized variant of the function on the stack. */
+	KGR_LAST_FINALIZED,
+	/*
+	 * Find the last variant of the function on the stack. Take into
+	 * account even the patch in progress.
+	 */
+	KGR_LAST_EXISTING,
+	/* Find the variant of the function _only_ in the patch in progress. */
+	KGR_IN_PROGRESS,
+	/*
+	 * This is the first unused find type. It can be used to check for
+	 * invalid value.
+	 */
+	KGR_LAST_TYPE
+};
+
+/*
+ * This function takes information about the patched function from the given
+ * struct kgr_patch_fun and tries to find the requested variant of the
+ * function. It returns NULL when the requested variant cannot be found.
+ */
+static struct kgr_patch_fun *
+kgr_get_patch_fun(const struct kgr_patch_fun *patch_fun,
+		  enum kgr_find_type type)
+{
+	const char *name = patch_fun->name;
+	struct kgr_patch_fun *pf, *found_pf = NULL;
+	struct kgr_patch *p;
+
+	if (type < 0 || type >= KGR_LAST_TYPE) {
+		pr_warn("kgr_get_patch_fun: invalid find type: %d\n", type);
+		return NULL;
+	}
+
+	if (kgr_patch && (type == KGR_IN_PROGRESS || type == KGR_LAST_EXISTING))
+		kgr_for_each_patch_fun(kgr_patch, pf)
+			if (!strcmp(pf->name, name))
+				return pf;
+
+	if (type == KGR_IN_PROGRESS)
+		goto out;
+
+	list_for_each_entry(p, &kgr_patches, list) {
+		kgr_for_each_patch_fun(p, pf) {
+			if (type == KGR_PREVIOUS && pf == patch_fun)
+				goto out;
+
+			if (!strcmp(pf->name, name))
+				found_pf = pf;
+		}
+	}
+out:
+	return found_pf;
+}
+
+static unsigned long kgr_get_old_fun(const struct kgr_patch_fun *patch_fun)
+{
+	struct kgr_patch_fun *pf = kgr_get_patch_fun(patch_fun, KGR_PREVIOUS);
+
+	if (pf)
+		return (unsigned long)pf->new_fun;
+
+	return patch_fun->loc_name;
+}
+
+/*
+ * Obtain the "previous" (in the sense of patch stacking) value of ftrace_ops
+ * so that it can be put back properly in case of reverting the patch
+ */
+static struct ftrace_ops *
+kgr_get_old_fops(const struct kgr_patch_fun *patch_fun)
+{
+	struct kgr_patch_fun *pf = kgr_get_patch_fun(patch_fun, KGR_PREVIOUS);
+
+	return pf ? &pf->ftrace_ops_fast : NULL;
+}
+
 static int kgr_switch_fops(struct kgr_patch_fun *patch_fun,
 		struct ftrace_ops *new_fops, struct ftrace_ops *unreg_fops)
 {
@@ -313,6 +446,14 @@ static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 	if (IS_ERR_VALUE(addr))
 		return addr;
 
+	pr_debug("kgr: storing %lx to loc_name for %s\n",
+			addr, patch_fun->name);
+	patch_fun->loc_name = addr;
+
+	addr = kgr_get_old_fun(patch_fun);
+	if (IS_ERR_VALUE(addr))
+		return addr;
+
 	pr_debug("kgr: storing %lx to loc_old for %s\n",
 			addr, patch_fun->name);
 	patch_fun->loc_old = addr;
@@ -353,6 +494,12 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 
 		next_state = KGR_PATCH_SLOW;
 		new_ops = &patch_fun->ftrace_ops_slow;
+		/*
+		 * If some previous patch already patched a function, the old
+		 * fops need to be disabled, otherwise the new redirection will
+		 * never be used.
+		 */
+		unreg_ops = kgr_get_old_fops(patch_fun);
 		break;
 	case KGR_PATCH_SLOW:
 		if (revert || !final)
@@ -373,6 +520,11 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 			return -EINVAL;
 		next_state = KGR_PATCH_REVERTED;
 		unreg_ops = &patch_fun->ftrace_ops_slow;
+		/*
+		 * Put back in place the old fops that were deregistered in
+		 * case of stacked patching (see the comment above).
+		 */
+		new_ops = kgr_get_old_fops(patch_fun);
 		break;
 	case KGR_PATCH_SKIPPED:
 		return 0;
@@ -406,9 +558,21 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	}
 
 	mutex_lock(&kgr_in_progress_lock);
+	if (patch->refs) {
+		pr_err("kgr: can't patch, this patch is still referenced\n");
+		ret = -EBUSY;
+		goto err_unlock;
+	}
+
 	if (kgr_in_progress) {
 		pr_err("kgr: can't patch, another patching not yet finalized\n");
 		ret = -EAGAIN;
+		goto err_unlock;
+	}
+
+	if (revert && list_empty(&patch->list)) {
+		pr_err("kgr: can't patch, this one was already reverted\n");
+		ret = -EINVAL;
 		goto err_unlock;
 	}
 
@@ -446,6 +610,10 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	kgr_in_progress = true;
 	kgr_patch = patch;
 	kgr_revert = revert;
+	if (revert)
+		list_del_init(&patch->list); /* init for list_empty() above */
+	else
+		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
 	kgr_handle_irqs();

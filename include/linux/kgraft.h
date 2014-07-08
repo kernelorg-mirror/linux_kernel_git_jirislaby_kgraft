@@ -20,6 +20,7 @@
 #include <linux/bitops.h>
 #include <linux/compiler.h>
 #include <linux/kobject.h>
+#include <linux/list.h>
 #include <linux/ftrace.h>
 #include <linux/sched.h>
 
@@ -36,7 +37,8 @@ struct kgr_patch;
  *
  * @name: function to patch
  * @new_fun: function with the new body
- * @loc_old: cache of @name's function address
+ * @loc_name: cache of @name's function address
+ * @loc_old: cache of the last function address for @name in the patches list
  * @ftrace_ops_slow: ftrace ops for slow (temporary) stub
  * @ftrace_ops_fast: ftrace ops for fast () stub
  */
@@ -58,6 +60,7 @@ struct kgr_patch_fun {
 		KGR_PATCH_SKIPPED,
 	} state;
 
+	unsigned long loc_name;
 	unsigned long loc_old;
 
 	struct ftrace_ops ftrace_ops_slow;
@@ -68,7 +71,9 @@ struct kgr_patch_fun {
  * struct kgr_patch -- a kGraft patch
  *
  * @kobj: object representing the sysfs entry
+ * @list: member in patches list
  * @finish: waiting till it is safe to remove the module with the patch
+ * @refs: how many patches need to be reverted before this one
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
  * @patches: array of @kgr_patch_fun structures
@@ -76,7 +81,9 @@ struct kgr_patch_fun {
 struct kgr_patch {
 	/* internal state information */
 	struct kobject kobj;
+	struct list_head list;
 	struct completion finish;
+	unsigned int refs;
 
 	/* a patch shall set these */
 	const char *name;
