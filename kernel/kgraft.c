@@ -32,7 +32,7 @@
 #include <linux/workqueue.h>
 
 static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
-		bool revert);
+		bool revert, bool replace_revert);
 static void kgr_work_fn(struct work_struct *work);
 static void __kgr_handle_going_module(const struct module *mod);
 
@@ -160,6 +160,66 @@ unlock:
 	return failed;
 }
 
+/*
+ * The patches are no longer used and can be removed immediately, because
+ * replace_all patch is finalized (and not yet in the kgr_patches list). We do
+ * not have to deal with refs for older patches, since all of them are to be
+ * removed.
+ */
+static void kgr_remove_patches_fast(void)
+{
+	struct kgr_patch *p, *tmp;
+
+	list_for_each_entry_safe(p, tmp, &kgr_patches, list) {
+		list_del(&p->list);
+		module_put(p->owner);
+	}
+}
+
+/*
+ * In case of replace_all patch we need to finalize also reverted functions in
+ * all previous patches. All previous patches contain only functions either in
+ * APPLIED state (not reverted and no longer used) or in REVERT_SLOW state. We
+ * mark the former as REVERTED and finalize the latter. Afterwards the patches
+ * can be safely removed from the patches list (by calling
+ * kgr_remove_patches_fast as in kgr_finalize).
+ *
+ * In case finalization fails the system is in inconsistent state with no way
+ * out. It is better to BUG() in this situation.
+ */
+static void kgr_finalize_replaced_funs(void)
+{
+	struct kgr_patch_fun *pf;
+	struct kgr_patch *p;
+	int ret;
+
+	list_for_each_entry(p, &kgr_patches, list)
+		kgr_for_each_patch_fun(p, pf) {
+			/*
+			 * Function was not reverted, but is no longer used.
+			 * Mark it as reverted so the user would not be confused
+			 * by sysfs reporting of states.
+			 */
+			if (pf->state == KGR_PATCH_APPLIED) {
+				pf->state = KGR_PATCH_REVERTED;
+				continue;
+			}
+
+			ret = kgr_patch_code(pf, true, true, true);
+			if (ret < 0) {
+				/*
+				 * Note: This should not happen. We only disable
+				 * slow stubs and if this failed we would BUG in
+				 * kgr_switch_fops called by kgr_patch_code. But
+				 * leave it here to be sure.
+				 */
+				pr_err("kgr: finalization for %s failed (%d). System in inconsistent state with no way out.\n",
+					pf->name, ret);
+				BUG();
+			}
+		}
+}
+
 static void kgr_finalize(void)
 {
 	struct kgr_patch_fun *patch_fun;
@@ -168,13 +228,29 @@ static void kgr_finalize(void)
 	mutex_lock(&kgr_in_progress_lock);
 
 	kgr_for_each_patch_fun(kgr_patch, patch_fun) {
-		ret = kgr_patch_code(patch_fun, true, kgr_revert);
+		ret = kgr_patch_code(patch_fun, true, kgr_revert, false);
 
 		if (ret < 0) {
 			pr_err("kgr: finalization for %s failed (%d). System in inconsistent state with no way out.\n",
 				patch_fun->name, ret);
 			BUG();
 		}
+
+		/*
+		 * When applying the replace_all patch all older patches are
+		 * removed. We need to update loc_old and point it to the
+		 * original function for the patch_funs from replace_all patch.
+		 * The change is safe because the fast stub is used now. The
+		 * correct value might be needed later when the patch is
+		 * reverted.
+		 */
+		if (kgr_patch->replace_all && !kgr_revert)
+			patch_fun->loc_old = patch_fun->loc_name;
+	}
+
+	if (kgr_patch->replace_all && !kgr_revert) {
+		kgr_finalize_replaced_funs();
+		kgr_remove_patches_fast();
 	}
 
 	free_percpu(kgr_irq_use_new);
@@ -182,8 +258,9 @@ static void kgr_finalize(void)
 	if (kgr_revert) {
 		kgr_refs_dec();
 		module_put(kgr_patch->owner);
-	} else
+	} else {
 		list_add_tail(&kgr_patch->list, &kgr_patches);
+	}
 
 	kgr_patch = NULL;
 	kgr_in_progress = false;
@@ -491,7 +568,7 @@ static int kgr_init_ftrace_ops(struct kgr_patch_fun *patch_fun)
 }
 
 static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
-		bool revert)
+		bool revert, bool replace_revert)
 {
 	struct ftrace_ops *new_ops = NULL, *unreg_ops = NULL;
 	enum kgr_patch_state next_state;
@@ -499,7 +576,7 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 
 	switch (patch_fun->state) {
 	case KGR_PATCH_INIT:
-		if (revert || final)
+		if (revert || final || replace_revert)
 			return -EINVAL;
 		err = kgr_init_ftrace_ops(patch_fun);
 		if (err) {
@@ -520,7 +597,7 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 		unreg_ops = kgr_get_old_fops(patch_fun);
 		break;
 	case KGR_PATCH_SLOW:
-		if (revert || !final)
+		if (revert || !final || replace_revert)
 			return -EINVAL;
 		next_state = KGR_PATCH_APPLIED;
 		new_ops = &patch_fun->ftrace_ops_fast;
@@ -530,20 +607,39 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 		if (!revert || final)
 			return -EINVAL;
 		next_state = KGR_PATCH_REVERT_SLOW;
-		new_ops = &patch_fun->ftrace_ops_slow;
-		unreg_ops = &patch_fun->ftrace_ops_fast;
+		/*
+		 * Update ftrace ops only when used. It is always needed for
+		 * normal revert and in case of replace_all patch for the last
+		 * patch_fun stacked (which has been as such called till now).
+		 */
+		if (!replace_revert ||
+		    kgr_is_patch_fun(patch_fun, KGR_LAST_FINALIZED)) {
+			new_ops = &patch_fun->ftrace_ops_slow;
+			unreg_ops = &patch_fun->ftrace_ops_fast;
+		}
 		break;
 	case KGR_PATCH_REVERT_SLOW:
 		if (!revert || !final)
 			return -EINVAL;
 		next_state = KGR_PATCH_REVERTED;
-		unreg_ops = &patch_fun->ftrace_ops_slow;
 		/*
-		 * Put back in place the old fops that were deregistered in
-		 * case of stacked patching (see the comment above).
+		 * Update ftrace only when used. Normal revert removes the slow
+		 * ops and enables fast ops from the fallback patch if any. In
+		 * case of replace_all patch and reverting old patch_funs we
+		 * just need to remove the slow stub and only for the last old
+		 * patch_fun. The original code will be used.
 		 */
-		new_ops = kgr_get_old_fops(patch_fun);
+		if (!replace_revert) {
+			unreg_ops = &patch_fun->ftrace_ops_slow;
+			new_ops = kgr_get_old_fops(patch_fun);
+		} else if (kgr_is_patch_fun(patch_fun, KGR_LAST_FINALIZED)) {
+			unreg_ops = &patch_fun->ftrace_ops_slow;
+		}
 		break;
+	case KGR_PATCH_REVERTED:
+		if (!revert || final || replace_revert)
+			return -EINVAL;
+		return 0;
 	case KGR_PATCH_SKIPPED:
 		return 0;
 	default:
@@ -565,6 +661,62 @@ static int kgr_patch_code(struct kgr_patch_fun *patch_fun, bool final,
 	return 0;
 }
 
+static bool kgr_patch_contains(const struct kgr_patch *p, const char *name)
+{
+	const struct kgr_patch_fun *pf;
+
+	kgr_for_each_patch_fun(p, pf)
+		if (!strcmp(pf->name, name))
+			return true;
+
+	return false;
+}
+
+/*
+ * When replace_all patch is processed, all patches from kgr_patches are
+ * obsolete and will get replaced. All functions from the patches which are not
+ * patched in replace_all patch have to be reverted.
+ */
+static int kgr_revert_replaced_funs(struct kgr_patch *patch)
+{
+	struct kgr_patch *p;
+	struct kgr_patch_fun *pf;
+	int ret;
+
+	list_for_each_entry(p, &kgr_patches, list)
+		kgr_for_each_patch_fun(p, pf)
+			if (!kgr_patch_contains(patch, pf->name)) {
+				/*
+				 * Calls from new universe to all functions
+				 * being reverted are redirected to loc_old in
+				 * the slow stub. We need to call the original
+				 * functions and not the previous ones in terms
+				 * of stacking, so loc_old is changed to
+				 * loc_name.  Fast stub is still used, so change
+				 * of loc_old is safe.
+				 */
+				pf->loc_old = pf->loc_name;
+
+				ret = kgr_patch_code(pf, false, true, true);
+				if (ret < 0) {
+					/*
+					 * No need to fail with grace as in
+					 * kgr_modify_kernel
+					 */
+					pr_err("kgr: cannot revert function %s in patch %s (%d)\n",
+					      pf->name, p->name, ret);
+					return ret;
+				}
+			}
+
+	return 0;
+}
+
+/**
+ * kgr_modify_kernel -- apply or revert a patch
+ * @patch: patch to deal with
+ * @revert: if @patch should be reverted, set to true
+ */
 int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 {
 	struct kgr_patch_fun *patch_fun;
@@ -607,10 +759,20 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	set_bit(0, kgr_immutable);
 	wmb(); /* set_bit before kgr_handle_processes */
 
+	/*
+	 * We need to revert patches of functions not patched in replace_all
+	 * patch. Do that only while applying the replace_all patch.
+	 */
+	if (patch->replace_all && !revert) {
+		ret = kgr_revert_replaced_funs(patch);
+		if (ret)
+			goto err_free;
+	}
+
 	kgr_for_each_patch_fun(patch, patch_fun) {
 		patch_fun->patch = patch;
 
-		ret = kgr_patch_code(patch_fun, false, revert);
+		ret = kgr_patch_code(patch_fun, false, revert, false);
 		/*
 		 * In case any of the symbol resolutions in the set
 		 * has failed, patch all the previously replaced fentry
@@ -630,7 +792,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	kgr_revert = revert;
 	if (revert)
 		list_del_init(&patch->list); /* init for list_empty() above */
-	else
+	else if (!patch->replace_all)
+		/* block all older patches if they are not replaced */
 		kgr_refs_inc();
 	mutex_unlock(&kgr_in_progress_lock);
 
@@ -719,6 +882,17 @@ EXPORT_SYMBOL_GPL(kgr_patch_remove);
  * use an old variant for the core functions. This is why we need to
  * use the slow stub when the patch is in progress. Both the core
  * kernel and module functions must be from the same universe.
+ *
+ * The situation differs a bit when the replace_all patch is being
+ * applied. The patch_funs present in the patch are pushed forward in
+ * the same way as for normal patches. So the slow stub is registered.
+ * The patch_funs not present in the replace_all patch have to be
+ * reverted. The slow stub is thus registered as well and next state
+ * set to KGR_PATCH_REVERT_SLOW. We can do it only for the last
+ * patch_funs in terms of stacking (KGR_LAST_FINALIZED), because the
+ * other would not be used at all and all older patches are going to
+ * be removed during finalization. Ftrace stub registration has to be
+ * done only for this last patch_fun.
  */
 static int kgr_patch_code_delayed(struct kgr_patch_fun *patch_fun)
 {
@@ -734,14 +908,29 @@ static int kgr_patch_code_delayed(struct kgr_patch_fun *patch_fun)
 		/* this must be the last existing patch on the stack */
 		new_ops = &patch_fun->ftrace_ops_slow;
 	} else {
-		next_state = KGR_PATCH_APPLIED;
-		/*
-		 * Check for the last existing and not the last finalized
-		 * patch_fun here! There might be another patch_fun in the
-		 * patch in progress that will be handled in the next calls.
-		 */
-		if (kgr_is_patch_fun(patch_fun, KGR_LAST_EXISTING))
-			new_ops = &patch_fun->ftrace_ops_fast;
+		if (kgr_patch && kgr_patch->replace_all && !kgr_revert &&
+		    !kgr_patch_contains(kgr_patch, patch_fun->name)) {
+			next_state = KGR_PATCH_REVERT_SLOW;
+			patch_fun->loc_old = patch_fun->loc_name;
+			/*
+			 * Check for the last finalized patch is enough. We are
+			 * here only when the function is not included in the
+			 * patch in progress (kgr_patch).
+			 */
+			if (kgr_is_patch_fun(patch_fun, KGR_LAST_FINALIZED))
+				new_ops = &patch_fun->ftrace_ops_slow;
+		} else {
+			next_state = KGR_PATCH_APPLIED;
+			/*
+			 * Check for the last existing and not the last
+			 * finalized patch_fun here! This function is called
+			 * for all patches. There might be another patch_fun
+			 * in the patch in progress that will need to register
+			 * the ftrace ops.
+			 */
+			if (kgr_is_patch_fun(patch_fun, KGR_LAST_EXISTING))
+				new_ops = &patch_fun->ftrace_ops_fast;
+		}
 	}
 
 	if (new_ops) {
