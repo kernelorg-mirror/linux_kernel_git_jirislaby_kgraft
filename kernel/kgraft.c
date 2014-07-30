@@ -707,6 +707,143 @@ EXPORT_SYMBOL_GPL(kgr_patch_remove);
 #ifdef CONFIG_MODULES
 
 /*
+ * Put the patch into the same state that the related patch is in.
+ * It means that we need to use fast stub if the patch is finalized
+ * and slow stub when the patch is in progress. Also we need to
+ * register the ftrace stub only for the last patch on the stack
+ * for the given function.
+ *
+ * Note the patched function from this module might call another
+ * patched function from the kernel core. Some thread might still
+ * use an old variant for the core functions. This is why we need to
+ * use the slow stub when the patch is in progress. Both the core
+ * kernel and module functions must be from the same universe.
+ */
+static int kgr_patch_code_delayed(struct kgr_patch_fun *patch_fun)
+{
+	struct ftrace_ops *new_ops = NULL;
+	enum kgr_patch_state next_state;
+	int err;
+
+	if (kgr_is_patch_fun(patch_fun, KGR_IN_PROGRESS)) {
+		if (kgr_revert)
+			next_state = KGR_PATCH_REVERT_SLOW;
+		else
+			next_state = KGR_PATCH_SLOW;
+		/* this must be the last existing patch on the stack */
+		new_ops = &patch_fun->ftrace_ops_slow;
+	} else {
+		next_state = KGR_PATCH_APPLIED;
+		/*
+		 * Check for the last existing and not the last finalized
+		 * patch_fun here! There might be another patch_fun in the
+		 * patch in progress that will be handled in the next calls.
+		 */
+		if (kgr_is_patch_fun(patch_fun, KGR_LAST_EXISTING))
+			new_ops = &patch_fun->ftrace_ops_fast;
+	}
+
+	if (new_ops) {
+		err = kgr_ftrace_enable(patch_fun, new_ops);
+		if (err) {
+			pr_err("kgr: enabling of ftrace function for the originally skipped %lx (%s) failed with %d\n",
+			       patch_fun->loc_old, patch_fun->name, err);
+			return err;
+		}
+	}
+
+	patch_fun->state = next_state;
+	pr_debug("kgr: delayed redirection for %s done\n", patch_fun->name);
+	return 0;
+}
+
+/*
+ * This function is called when new module is loaded but before it is used.
+ * Therefore it could set the fast path for already finalized patches.
+ *
+ * The patching of the module (registration of the stubs) could fail. This would
+ * prevent the loading.
+ */
+static int kgr_handle_patch_for_loaded_module(struct kgr_patch *patch,
+					       const struct module *mod)
+{
+	struct kgr_patch_fun *patch_fun;
+	unsigned long addr;
+	int err;
+
+	kgr_for_each_patch_fun(patch, patch_fun) {
+		if (patch_fun->state != KGR_PATCH_SKIPPED)
+			continue;
+
+		addr =  kallsyms_lookup_name(patch_fun->name);
+		if (!within_module(addr, mod))
+			continue;
+
+		err = kgr_init_ftrace_ops(patch_fun);
+		if (err) {
+			return err;
+		}
+
+		err = kgr_patch_code_delayed(patch_fun);
+		if (err) {
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * kgr_module_init -- apply skipped patches for newly loaded modules
+ *
+ * It must be called when symbols are visible to kallsyms but before the module
+ * init is called. Otherwise, it would not be able to use the fast stub.
+ */
+int kgr_module_init(const struct module *mod)
+{
+	struct kgr_patch *p;
+	int ret;
+
+	/* early modules will be patched once KGraft is initialized */
+	if (!kgr_initialized)
+		return 0;
+
+	mutex_lock(&kgr_in_progress_lock);
+
+	/*
+	 * Check already applied patches for skipped functions. If there are
+	 * more patches we want to set them all. They need to be in place when
+	 * we remove some patch.
+	 * If the patching fails remove all stubs. It is doable by call to
+	 * module going notifier.
+	 */
+	list_for_each_entry(p, &kgr_patches, list) {
+		ret = kgr_handle_patch_for_loaded_module(p, mod);
+		if (ret) {
+			pr_err("kgr: delayed patching of the module (%s) failed (%d). Module was not inserted.\n",
+					mod->name, ret);
+			__kgr_handle_going_module(mod);
+			goto out;
+		}
+	}
+
+	/* also check the patch in progress that is being applied */
+	if (kgr_patch) {
+		ret = kgr_handle_patch_for_loaded_module(kgr_patch, mod);
+		if (ret) {
+			pr_err("kgr: delayed patching of the module (%s) failed (%d). Module was not inserted.\n",
+					mod->name, ret);
+			__kgr_handle_going_module(mod);
+			goto out;
+		}
+	}
+
+out:
+	mutex_unlock(&kgr_in_progress_lock);
+	return ret;
+}
+
+/*
  * Disable the patch immediately. It does not matter in which state it is.
  *
  * This function is used when a module is being removed and the code is
