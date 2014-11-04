@@ -294,6 +294,16 @@ static void kgr_work_fn(struct work_struct *work)
 	printed = false;
 }
 
+void kgr_unmark_processes(void)
+{
+	struct task_struct *p, *t;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(p, t)
+		klp_kgraft_mark_task_safe(t);
+	read_unlock(&tasklist_lock);
+}
+
 static void kgr_handle_processes(void)
 {
 	struct task_struct *p, *t;

@@ -109,6 +109,7 @@ extern bool kgr_force_load_module;
 extern int kgr_patch_kernel(struct kgr_patch *);
 extern void kgr_patch_remove(struct kgr_patch *);
 
+extern void kgr_unmark_processes(void);
 extern int kgr_modify_kernel(struct kgr_patch *patch, bool revert);
 extern int kgr_module_init(const struct module *mod);
 extern int kgr_patch_dir_add(struct kgr_patch *patch);

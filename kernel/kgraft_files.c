@@ -153,6 +153,18 @@ static ssize_t in_progress_show(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%d\n", kgr_in_progress);
 }
 
+static ssize_t in_progress_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	if (count == 0 || buf[0] != '0')
+		return -EINVAL;
+
+	kgr_unmark_processes();
+	WARN(1, "kgr: all processes marked as migrated on admin's request\n");
+
+	return count;
+}
+
 static ssize_t force_load_module_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
@@ -177,7 +189,7 @@ static ssize_t force_load_module_store(struct kobject *kobj,
 	return count;
 }
 
-static struct kobj_attribute kgr_attr_in_progress = __ATTR_RO(in_progress);
+static struct kobj_attribute kgr_attr_in_progress = __ATTR_RW(in_progress);
 static struct kobj_attribute kgr_attr_force_load_module =
 		__ATTR_RW(force_load_module);
 
