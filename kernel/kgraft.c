@@ -42,6 +42,7 @@ static DEFINE_MUTEX(kgr_in_progress_lock);
 static LIST_HEAD(kgr_patches);
 static bool __percpu *kgr_irq_use_new;
 bool kgr_in_progress;
+bool kgr_force_load_module;
 static bool kgr_initialized;
 static struct kgr_patch *kgr_patch;
 static bool kgr_revert;
@@ -762,7 +763,9 @@ static int kgr_patch_code_delayed(struct kgr_patch_fun *patch_fun)
  * Therefore it could set the fast path for already finalized patches.
  *
  * The patching of the module (registration of the stubs) could fail. This would
- * prevent the loading.
+ * prevent the loading. However the user can force the loading. In such
+ * situation we continue. This can lead the inconsistent system state but the
+ * user should know what he is doing.
  */
 static int kgr_handle_patch_for_loaded_module(struct kgr_patch *patch,
 					       const struct module *mod)
@@ -781,12 +784,22 @@ static int kgr_handle_patch_for_loaded_module(struct kgr_patch *patch,
 
 		err = kgr_init_ftrace_ops(patch_fun);
 		if (err) {
-			return err;
+			if (kgr_force_load_module) {
+				WARN(1, "kgr: delayed patching of the module (%s) failed (%d). Insertion of the module forced.\n",
+					mod->name, err);
+				continue;
+			} else {
+				return err;
+			}
 		}
 
 		err = kgr_patch_code_delayed(patch_fun);
 		if (err) {
-			return err;
+			if (kgr_force_load_module)
+				WARN(1, "kgr: delayed patching of the module (%s) failed (%d). Insertion of the module forced.\n",
+					mod->name, err);
+			else
+				return err;
 		}
 	}
 
