@@ -2248,6 +2248,26 @@ static int proc_pid_kgr_in_progress(struct seq_file *m,
 		struct pid_namespace *ns, struct pid *pid,
 		struct task_struct *task)
 {
+	struct task_struct *t;
+	bool in_progress = false;
+
+	rcu_read_lock();
+	for_each_thread(task, t)
+		if (klp_kgraft_task_in_progress(t)) {
+			in_progress = true;
+			break;
+		}
+	rcu_read_unlock();
+
+	seq_printf(m, "%d\n", in_progress);
+
+	return 0;
+}
+
+static int proc_task_kgr_in_progress(struct seq_file *m,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *task)
+{
 	seq_printf(m, "%d\n", klp_kgraft_task_in_progress(task));
 
 	return 0;
@@ -3175,6 +3195,9 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
 	REG("setgroups",  S_IRUGO|S_IWUSR, proc_setgroups_operations),
+#endif
+#if IS_ENABLED(CONFIG_LIVEPATCH)
+	ONE("kgr_in_progress",	S_IRUSR, proc_task_kgr_in_progress),
 #endif
 };
 
